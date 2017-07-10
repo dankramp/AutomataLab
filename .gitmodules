@@ -1,0 +1,3 @@
+[submodule "VASim"]
+	path = VASim
+	url = https://github.com/jackwadden/VASim.git
