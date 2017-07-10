@@ -45,6 +45,7 @@ class SigmaJSONWriter {
   }
   static std::string simulateStep(Automata *a, uint8_t symbol) {
     std::vector<json11::Json> changedNodes;
+    std::vector<json11::Json> reportNodes;
     
     // This won't fix the duplication problem if an element is activated
     // in stage two and enabled in stage three
@@ -66,6 +67,10 @@ class SigmaJSONWriter {
 	changedNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
 	      {"color", "rgb(255,0,255)"}
+	  });
+	reportNodes.push_back(json11::Json::object { 
+	    {"id", s->getId() },
+	      {"rep_code", s->getReportCode() }
 	  });
       }
       else {
@@ -116,7 +121,8 @@ class SigmaJSONWriter {
 
     std::stringstream out;
     json11::Json json_object = json11::Json::object {
-	{"nodes", changedNodes}
+      {"nodes", changedNodes},
+      {"rep_nodes", reportNodes }
     };
     out << nlohmann::json::parse(json_object.dump()).dump(4) << std::endl;
     
@@ -149,6 +155,8 @@ class SigmaJSONWriter {
 	color = "rgb(100,100,100)";
       else
 	color = "rgb(158,185,212)";
+      //color= "#9eb9d4";
+      
       label = static_cast<STE *>(parent)->getSymbolSet();
       break;
     case ElementType::OR_T:
@@ -183,7 +191,8 @@ class SigmaJSONWriter {
 	  {"label", label },
 	    {"color", color },
 	      {"x", std::to_string(xPos) },
-		{"y", std::to_string(y) }
+		{"y", std::to_string(y) }, 
+		  {"type", "fast"}
       });
     }
 
@@ -245,7 +254,8 @@ class SigmaJSONWriter {
 	  {"label", label },
 	    {"color", color },
 	      {"x", std::to_string((low + high + 1)/2) },
-		{"y", std::to_string(y) }
+		{"y", std::to_string(y) },
+		  {"type", "fast"}
       });
 
     if (DEBUG) 

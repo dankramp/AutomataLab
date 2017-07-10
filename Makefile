@@ -26,4 +26,4 @@ CC=g++-5
 OBJ=VASimVis.cc $(LIBVASIM) $(JSON11_HPP)
 
 all: $(OBJ)
-	$(CC) -o $(TARGET) VASimVis.cc $(LIBVASIM) $(LIBMNRL) -I$(JSON11_HPP) $(CXXFLAGS)
+	$(CC) -o $(TARGET) VASimVis.cc $(LIBVASIM) $(LIBMNRL) $(CXXFLAGS)

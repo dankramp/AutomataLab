@@ -16,12 +16,13 @@
 }
 .footer {
     position: fixed;
-    bottom: 0;
+    bottom: 1px;
     background-color: #eee;
     display: block;
     width: 100%;
     padding: 0px 4px;
     border-top: 4px solid #ddd;
+    z-index: 1;
 }
 .footer-table {
     //border: 1px solid black;
@@ -63,6 +64,9 @@
 }
 .input-display td.highlight {
     background-color: yellow;
+}
+.input-display td.report {
+    background-color: #ff77ff;
 }
 .input-display-table {
     border: 1px solid gray;
