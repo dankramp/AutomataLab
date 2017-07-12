@@ -1,5 +1,11 @@
 # ANMLViewer Changelog
 
+### 1.12 - release (7/10/17)
+- Added "Play Speed" range slider to add delay to between simulation steps
+  - 'Fastest' adds no delay; 'Slowest' adds 2 seconds between steps
+- Moved all range slider handling to Javascript so it is responsive without server interaction
+- Removed unneeded functions from VASimVis.cc
+
 ### 1.11 - release (7/10/17)
 - Implemented new cache system code
   - Generates 100 graphs immediately
