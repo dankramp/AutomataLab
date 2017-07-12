@@ -1,1 +1,0 @@
-This is a test file to add an input stream to the screen when simulating the graph file using the WebViewer app. 
