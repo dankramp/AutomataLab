@@ -45,6 +45,7 @@ var cache_length = 0;
 var cache_index = -1;
 var cache_fetch_size = 100;
 var playSim = false;
+var speed = 0;
 var updatingCache = false;
 var input_length = 0;
 
@@ -53,22 +54,31 @@ function setInputLength(length) {
 }
 
 function setCachedGraphs(index, json_object) {
-    console.log("Setting cached graphs...");
     cachedGraphs = json_object;
     cache_length = cachedGraphs[0].length;
     cache_index = index;
-    console.log("cache_length: " + cache_length + " cache_index = " + cache_index + " simIndex: " + simIndex);
     updatingCache = false;
 }
 
 function loadCachedGraph(index) {
-    //console.log("index: " + index);
     var graph = cachedGraphs[0][index];
-    //console.log("graph" + (cachedGraphs[0].length - index - 1) + ": " + JSON.stringify(graph));
     updateGraph(graph);
 }
 
 function loadGraph(json_object){
+    // Reset all simulation settings when new graph loaded
+    simIndex = 0;
+    cache_length = 0;
+    cache_index = -1;
+    cache_fetch_size = 100;
+    playSim = false;
+    updatingCache = false;
+
+    nodeSizeChange($('#node-slider').val());
+    arrowSizeChange($('#arrow-slider').val());
+    edgeSizeChange($('#edge-slider').val());
+    widthChange($('#width-slider').val());
+
     try {
 	sig.graph.clear();
 	sig.refresh();
@@ -163,6 +173,42 @@ function loadGraph(json_object){
     }
 
     //  Button listeners active after graph load
+    $('input[type=range]').on('input', function() {
+	$(this).trigger('change');
+    });
+    $('#node-slider').change( function() {
+	nodeSizeChange($(this).val());
+    });
+    $('#arrow-slider').change( function() {
+	arrowSizeChange($(this).val());
+    });
+    $('#edge-slider').change( function() {
+	edgeSizeChange($(this).val());
+    });
+    $('#width-slider').change( function() {
+	widthChange($(this).val());
+    });
+    $('#speed-slider').change( function() {
+	var val = $(this).val();
+	speed = val;
+	if (playSim) {
+	    $('#play-sim-btn').html("Play Simulation");
+	    $('#sim-step-btn').prop("disabled", false);
+	    $('#sim-rev-btn').prop("disabled", false);
+	    clearInterval(interval);
+	    playSim = false;
+	}
+	if (val == 0)
+	    $('#play-speed-text').html("Play Speed: Fastest");
+	else if (val >= -.3)
+	    $('#play-speed-text').html("Play Speed: Fast");
+	else if (val >= -.8)
+	    $('#play-speed-text').html("Play Speed: Medium");	
+	else if (val >= -1.8)
+	    $('#play-speed-text').html("Play Speed: Slow");
+	else
+	    $('#play-speed-text').html("Play Speed: Slowest");
+    });
     $('#reset-camera-btn').click(function() {
 	sigma.misc.animation.camera(
 	    sig.cameras[0],
@@ -202,6 +248,7 @@ function loadGraph(json_object){
 	    $('#sim-rev-btn').prop("disabled", false);
 	    $('#play-sim-btn').html("Play Simulation");
 	});
+
     });
     var interval = null;
     $('#play-sim-btn').click(function() {
@@ -216,12 +263,11 @@ function loadGraph(json_object){
 	    $('#sim-step-btn').prop("disabled", false);
 	    $('#sim-rev-btn').prop("disabled", false);
 	    clearInterval(interval);
-	    console.log("Simindex = " + simIndex);
 	    return;
 	}
 	interval = setInterval(function() {
 	    $('#hidden-play-btn').click();
-	}, 1);
+	}, speed*-1000 + 1);
 
     });
 }
@@ -229,7 +275,6 @@ function loadGraph(json_object){
 function stepFromCache(step_size) {
     return new Promise(function(resolve, reject) {
 	var relativeIndex = simIndex + cache_length - cache_index - 1 + step_size;
-	console.log(relativeIndex);
 	if (relativeIndex >= cache_length || relativeIndex < 0) {
 	    reject("End of cache reached");
 	    return;
@@ -272,11 +317,10 @@ function stepFromCache(step_size) {
 	
 	loadCachedGraph(relativeIndex);
 	resolve("Loaded graph");
-	// To implement: cache reloading
+	// Cache reloading
 	if (!updatingCache && cache_index != input_length - 1 && cache_index - simIndex <= .25 * cache_fetch_size) {
 	    updatingCache = true;
-	    $('#hidden-cache-btn').click();
-	    console.log("Adding to cache");
+	    $('#hidden-cache-btn').click();	   
 	}
     });
 }

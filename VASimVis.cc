@@ -33,7 +33,6 @@ public:
   void simulateAutomata(int prevIndex, int index, char symbol);
   std::string simulateAutomata(char symbol);
   void beginSimulation();
-  void stepFromCache(int step_size);
   void addToJSCache(int numGraphs);
   void loadDemoGraph(int index);
 
@@ -74,7 +73,6 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->useStyleSheet("styles.css");
   
   // Imports
-  Wt::WApplication::instance()->require("/VivaGraphJS/dist/vivagraph.js");
   
   Wt::WApplication::instance()->require("/sigma.js/src/sigma.core.js");
   Wt::WApplication::instance()->require("/sigma.js/src/conrad.js");
@@ -426,42 +424,11 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   footer_table->elementAt(0,5)->setStyleClass("footer-text");
 
   // Table footers/inputs
-  Wt::WSlider *node_slider = new Wt::WSlider(footer_table->elementAt(1,0));
-  node_slider->setTickInterval(1);
-  node_slider->setMinimum(1);
-  node_slider->setMaximum(20);
-  node_slider->setValue(4);
-  node_slider->setId("node-slider");
-  node_slider->valueChanged().connect(std::bind([=] () {
-	doJavaScript(("nodeSizeChange(" + node_slider->valueText() + ")").toUTF8());
-      }));
-  Wt::WSlider *arrow_slider = new Wt::WSlider(footer_table->elementAt(1,1));
-  arrow_slider->setTickInterval(1);
-  arrow_slider->setMinimum(0);
-  arrow_slider->setMaximum(10);
-  arrow_slider->setValue(1);
-  arrow_slider->setId("arrow-slider");
-  arrow_slider->valueChanged().connect(std::bind([=] () {
-	doJavaScript(("arrowSizeChange(" + arrow_slider->valueText() + ")").toUTF8());
-      }));
-  Wt::WSlider *edge_slider = new Wt::WSlider(footer_table->elementAt(1,2));
-  edge_slider->setTickInterval(1);
-  edge_slider->setMinimum(1);
-  edge_slider->setMaximum(15);
-  edge_slider->setValue(4);
-  edge_slider->setId("edge-slider");
-  edge_slider->valueChanged().connect(std::bind([=] () {
-	doJavaScript(("edgeSizeChange(" + edge_slider->valueText() + ")").toUTF8());
-      }));
-  Wt::WSlider *width_slider = new Wt::WSlider(footer_table->elementAt(1,4));
-  width_slider->setTickInterval(1);
-  width_slider->setMinimum(1);
-  width_slider->setMaximum(20);
-  width_slider->setValue(10);
-  width_slider->setId("width-slider");
-  width_slider->valueChanged().connect(std::bind([=] () {
-	doJavaScript(("widthChange(" + width_slider->valueText() + ")").toUTF8());
-      }));
+  Wt::WText *node_slider = new Wt::WText("<input type='range' min='1' max='20' step='1' value='4' id='node-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,0));
+  Wt::WText *arrow_slider = new Wt::WText("<input type='range' min='0' max='10' step='1' value='1' id='arrow-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,1));
+  Wt::WText *edge_slider = new Wt::WText("<input type='range' min='1' max='15' step='1' value='4' id='edge-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,2));
+  Wt::WText *width_slider = new Wt::WText("<input type='range' min='1' max='20' step='1' value='10' id='width-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,4));
+
   footer_table->elementAt(1,0)->setStyleClass("footer-text");
   footer_table->elementAt(1,1)->setStyleClass("footer-text");
   footer_table->elementAt(1,2)->setStyleClass("footer-text");
@@ -476,18 +443,32 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   simulation_tools->setId("sim-tools");
   simulation_tools->setStyleClass("settings-container");
   simulation_tools->hide();
+  Wt::WTable *sim_tools_table = new Wt::WTable(simulation_tools);
+  sim_tools_table->setHeaderCount(1);
+  sim_tools_table->setStyleClass("footer-table");
+  sim_tools_table->elementAt(0,0)->addWidget(new Wt::WText("Simulation Controls: "));
+  sim_tools_table->elementAt(0,0)->setColumnSpan(3);
+  Wt::WText *play_speed_text = new Wt::WText("Play Speed: Fastest", sim_tools_table->elementAt(0,3));
+  play_speed_text->setId("play-speed-text");
+  sim_tools_table->elementAt(0,0)->setStyleClass("footer-text");
+  sim_tools_table->elementAt(0,3)->setStyleClass("footer-text");
+  sim_tools_table->elementAt(0,3)->setWidth(200);
 
-  sim_rev = new Wt::WPushButton("<< Step", simulation_tools);
+
+  sim_rev = new Wt::WPushButton("<< Step", sim_tools_table->elementAt(1,0));
   sim_rev->setStyleClass("btn btn-primary");
   sim_rev->setId("sim-rev-btn");
   
-  sim_step = new Wt::WPushButton("Step >>", simulation_tools);
+  sim_step = new Wt::WPushButton("Step >>", sim_tools_table->elementAt(1,1));
   sim_step->setStyleClass("btn btn-primary");
   sim_step->setId("sim-step-btn");
   
-  Wt::WPushButton *play_btn = new Wt::WPushButton("Play Simulation", simulation_tools);
+  Wt::WPushButton *play_btn = new Wt::WPushButton("Play Simulation", sim_tools_table->elementAt(1,2));
   play_btn->setStyleClass("btn btn-primary");
   play_btn->setId("play-sim-btn");
+
+  Wt::WText *speed_slider = new Wt::WText("<input type='range' min='-2' max='0' step='.1' value='0' id='speed-slider'>", Wt::XHTMLUnsafeText, sim_tools_table->elementAt(1,3));
+  speed_slider->setStyleClass("footer-text");
 
   Wt::WPushButton *hidden_play_btn = new Wt::WPushButton(simulation_tools);
   hidden_play_btn->setId("hidden-play-btn");
@@ -499,7 +480,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	  addToJSCache(cache_fetch_size);
       }));
 
-  Wt::WCheckBox *hex_mode_check = new Wt::WCheckBox(" Hex Char Mode", simulation_tools);
+  Wt::WCheckBox *hex_mode_check = new Wt::WCheckBox(" Hex Char Mode", sim_tools_table->elementAt(1,4));
   hex_mode_check->setId("hex-mode-box");
   hex_mode_check->setChecked(false);
   hex_mode_check->clicked().connect(std::bind ([=] () {
@@ -509,6 +490,12 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
 	updateTextDisplay();
       }));
+
+  sim_tools_table->elementAt(1,0)->setStyleClass("footer-text");
+  sim_tools_table->elementAt(1,1)->setStyleClass("footer-text");
+  sim_tools_table->elementAt(1,2)->setStyleClass("footer-text");
+  sim_tools_table->elementAt(1,3)->setStyleClass("footer-text");
+  sim_tools_table->elementAt(1,4)->setStyleClass("footer-text");
 
   /*
    * Graph container
@@ -731,51 +718,8 @@ std::string VASimViz::simulateAutomata(char symbol) {
 }
 
 /*
- * This should be removed. Can be done entirely in Javascript
+ * Initializes simlation and loads first graph from cache
  */
-void VASimViz::stepFromCache(int step_size) {
-  if (simIndex >= 0) {
-    input_display_table->elementAt(0, simIndex)->removeStyleClass("highlight");
-    input_display_table->elementAt(1, simIndex)->removeStyleClass("highlight");
-  }
-  simIndex += step_size;
-  input_display_table->elementAt(0, simIndex)->addStyleClass("highlight");
-  input_display_table->elementAt(1, simIndex)->addStyleClass("highlight");
-  int relativeIndex = simIndex + cache_length - cache_index - 1;
-
-  // Get reporting STEs for all steps in between
-  if (step_size > 0)
-    for (int i = simIndex - step_size + 1; i <= simIndex; i++) { 
-      int i_relativeIndex = i + cache_length - cache_index - 1;
-      if (!cache[0].array_items()[i_relativeIndex]["rep_nodes"].array_items().empty()) {
-	std::string reports = "";
-	for (auto &k : cache[0].array_items()[i_relativeIndex]["rep_nodes"].array_items()) {
-	  reports += "<p>" + k["id"].string_value() + ": " + k["rep_code"].string_value() + "</p>";
-	}
-	//std::cout << "reports: " << reports << std::endl;
-	input_display_table->elementAt(0, i)->setAttributeValue("data-toggle", "popover");
-	input_display_table->elementAt(0, i)->setAttributeValue("title", "Reporting STEs");
-	input_display_table->elementAt(0, i)->setAttributeValue("data-content", reports);
-	input_display_table->elementAt(0, i)->setAttributeValue("data-trigger", "hover focus");
-	input_display_table->elementAt(0, i)->setAttributeValue("data-container", "body");
-	input_display_table->elementAt(0, i)->setAttributeValue("data-placement", "top");
-	input_display_table->elementAt(0, i)->setAttributeValue("data-html", "true");
-	input_display_table->elementAt(0, i)->setStyleClass("report");
-	input_display_table->elementAt(1, i)->setAttributeValue("data-toggle", "popover");
-	input_display_table->elementAt(1, i)->setAttributeValue("title", "Reporting STEs");
-	input_display_table->elementAt(1, i)->setAttributeValue("data-content", reports);
-	input_display_table->elementAt(1, i)->setAttributeValue("data-trigger", "hover focus");
-	input_display_table->elementAt(1, i)->setAttributeValue("data-container", "body");
-	input_display_table->elementAt(1, i)->setAttributeValue("data-placement", "top");
-	input_display_table->elementAt(1, i)->setAttributeValue("data-html", "true");
-	input_display_table->elementAt(1, i)->setStyleClass("report");
-	doJavaScript("$('[data-toggle=\"popover\"]').popover()");
-      }
-    }
-
-  doJavaScript("loadCachedGraph(" + std::to_string(relativeIndex) + ")");
-}
-
 void VASimViz::beginSimulation() {
   ap.initializeSimulation();
   input_display_table->elementAt(0,0)->setStyleClass("highlight");
@@ -783,6 +727,7 @@ void VASimViz::beginSimulation() {
   addToJSCache(cache_fetch_size + 1);
   doJavaScript("stepFromCache(0)");
 }
+
 /*
  * Simulates and stores new graphs then sends to JavaScript
  */
