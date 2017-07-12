@@ -1,4 +1,11 @@
+# Ignore all files without extensions
+*
+!*.*
+!*/
+
+# Ignore text files
 *.txt
-VASimVis
+
+# Ignore autosaves
 *~
 *#
