@@ -1,55 +1,44 @@
-# ANMLZoo Automata Processing Benchmark Suite
+# ANMLViewer
+Visualization web client for VASim by Dan Kramp
 
-IMPORTANT: if using ANMLZoo for experiments, please see ERRATA below...
+This software allows the user to visualize and simulate large-scale automata. It is highly interactive and much faster than existing automata displaying software.
 
-## Description
-High-performance automata-processing engines are traditionally evaluated using a limited set of regular expressionrulesets. While regular expression rulesets are valid real-world examples of use cases for automata processing, they represent a small proportion of all use cases for automata-based computing. With the recent availability of architectures and software frameworks for automata processing, many new applications have been found to benefit from automata processing. These show a wide variety of characteristics that differ from prior, popular regular-expression benchmarks, and these should be considered when designing new systems for automata processing.
-This paper presents ANMLZoo, a benchmark repository for automata-based applications as well as automata engines for both von-Neumann and reconfigurable dataflow architectures.
+![ANMLViewer Fullscreen Demo](https://i.imgur.com/cxZNPZf.png)
 
-## Errata
-Since the publication of ANMLZoo, we have found a few issues with the construction of the benchmarks. We've listed the main issues below that may impact your experimentation with suggested ways to get around this. We will be updated the benchmark suite with a Version 1.1 Summer 2017 that addresses most of these issues.
+## How To Install + Run
+This tool uses [Wt, a C++ Web Toolkit](https://www.webtoolkit.eu/wt) v.3.7.7 for deployment and HTML generation. This must be installed on your computer before you can deploy locally.
+It also utilizes [Sigma.js](https://github.com/jacomyal/sigma.js) for graph display/interaction and [VASim](https://github.com/jackwadden/VASim/) for automata simulation. Both git directories are included.
 
-1. **The prefix merging algorithm in VASim had a bug that missed some minimization opportunities:** We have since fixed this bug and are now able to properly minimize applications like SPM. SPM even in the ANMLZoo paper had a node count of over 100,000! We originally included the application because the Micron compiler was able to identify these optimization opportunities.
-
-2. **RandomForest was incorrectly generated:** RandomForest was originally incorrectly generated for the ANMLZoo paper. We recognized this very early on and we have already generated a new application that fits within a single chip. I have noted this in the README for that application. The new application is rf.1chip.anml, while the old application used for the paper remains in the repo. This is discussed in the RandomForest README.
-
-3. **Some ANMLZoo benchmarks were improperly labeled as compiling to 1 chip:** To generate ANMLZoo "standard candle" automata, we increased the widget count until the number of "rectangular blocks" used by the Micron compiler violated the number of available rectangular blocks on the Micron D480 chip. Unfortunately, this was not the correct way to identify if an automata used more than 1 chip's worth of resources. Consequently, we now know that applications such as Levenshtein, EntityResolution, Snort, and ClamAV actually require 1.5 chips (or 3 half cores). We are looking to remedy this in Version 1.1.
-
-## TODO
-The benchmark suite has known mistakes outlined int the Errata. However, there are features that many users have requested that we plan to add in future versions. They are outlined below. If you would like a feature or application added to ANMLZoo, please create an issue ticket with a full description and use case of your feature.
-
-- Fix Erratum #3.
-- Add code for ANML emission.
-- Support [MNRL](https://github.com/kevinaangstadt/mnrl) file format.
-- Add more inputs for training and testing of automata optimization algorithms and automata processing engines and architecture development.
-- Add more automata within each "benchmark" label. Applications like Hamming and Levenshtein have huge amount of play in how they are generated. They were originally generated with semi-arbitrary parameters and so other applications with other dimensions could be added.
-
-## Benchmark Contributors
-
-Jack Wadden<br>
-Vinh Dang<br>
-Deyuan Guo<br>
-Elaheh Sadredini<br>
-Ke Wang<br>
-Chunkun Bo<br>
-Nathan Brunelle<br>
-Tom Tracy II<br>
-Matt Grimm<br>
-
-This suite was originally compiled by Jack Wadden (jackwadden@gmail.com). 
- 
-If you use this benchmark suite in a publication, please use the following citation:
-
-Wadden, J., Dang, V., Brunelle, N., Tracy II, T., Guo, D., Sadredini, E., Wang, K., Bo, C., Robins, G., Stan, M., and Skadron, S. "ANMLZoo: A Benchmark Suite for Exploring Bottlenecks in Automata Processing Engines and Architectures." 2016 IEEE International Symposium on Workload Characterization (IISWC'16). IEEE, 2016.
-
+Once all the files are downloaded, run the following:
 ```
-@inproceedings{ANMLZoo,  
-    title={{ANMLZoo: A Benchmark Suite for Exploring Bottlenecks in Automata Processing Engines and Architectures}},  
-    author={Wadden, Jack and Dang, Vinh and Brunelle, Nathan and Tracy II, Tom and Guo, Deyuan and Sadredini, Elaheh and Wang, Ke and Bo, Chunkun and Robins, Gabriel and Stan, Mircea and Skadron, Kevin},
-    booktitle={Proceedings of the IEEE International Symposium on Workload Characterization (IISWC)},  
-    year={2017},  
-}
+    user:~/WebViewer$ make
+    user:~/WebViewer$ run.sh
+```
+Then in your browser, navigate to the link provided by Wt:
+```
+    [info] "wthttp: started server: http://0.0.0.0:9090"
 ```
 
-## License
-Each benchmark and automata processing engine in ANMLZoo is individually licensed. Please refer to the benchmark directories for individual license files.
+## How To Use
+1. Select a local automata file (.anml/.mnrl) or a preset ANMLZoo file from the drop down.
+2. Choose which optimizations to apply to the automata and click "Generate".
+3. The automata is displayed and the user may interact with it in a number of ways:
+    - Zoom in/out using scroll wheel or touch-screen methods
+    - Drag screen to reposition graph
+    - Change the node display size, arrow size, edge thickness, and graph width in the "Graph Settings" tab at the bottom
+    - Toggle "Render Edges" setting for faster render times and manipulation of the view
+    - Toggle "Heat Map Mode" to see the nodes colored based on number of times the node has been enabled
+    - Hover over a node to see its symbol set, or click to see all connected nodes
+    - Click "Reset Camera" to reset view to initial zoom and position
+    - The header at the top can be hidden/shown at any time by clicking the bar along its bottom edge
+4. Select a local text input file to simulate on (if an ANMLZoo file was chosen, the text file will have already been loaded but can be overwritten by uploading another).
+5. The text file is displayed as a character stream along the bottom of the simulation window, displaying up to the first 1000 characters.
+6. Once both the automata file and text file are loaded, click "Simulate >>" in the header to begin simulating the automata.
+    - The character that is currently being simulated on is highlighted yellow in the character stream
+7. After the simulation cache is generated, the user may simulate the automata in a number of ways:
+    - Step backward/forward one character in the stream using the "<< Step" and "Step >>" respectively
+    - The user may step backwards until the beginning of the cache is reached; forward simulation can occur until the end of the input stream
+    - Play the simulation forward by pressing "Play Simulation"
+    - Toggle displaying the character stream as hex values using the "Hex Char Mode" check box
+    - View the ID and report code of all reporting STEs on any given character by hovering over characters that are highlighted purple
+8. Selecting a new automata or input file will reset the simulation and allow the user to restart without refreshing the page.
