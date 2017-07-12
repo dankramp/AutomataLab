@@ -44,81 +44,97 @@ class SigmaJSONWriter {
     
   }
   static std::string simulateStep(Automata *a, uint8_t symbol) {
+
+    // JSON output vectors
     std::vector<json11::Json> changedNodes;
     std::vector<json11::Json> reportNodes;
-    
-    // This won't fix the duplication problem if an element is activated
-    // in stage two and enabled in stage three
 
-    // *** COMPUTE STE MATCHES ***
-    // Get all activated elements
-    a->computeSTEMatches(symbol);
-    Stack <STE *> activatedSTEs = a->getActivatedSTEs();
+    a->simulate(symbol);
+    auto enabledCount = a->getEnabledCount();
+
+    // *** ADD CHANGED STES TO JSON GRAPH ***
     std::queue <STE *> tmp;
+    std::queue <Element *> activatedSTEs = a->getActivatedLastCycle();
+    std::queue <Element *> enabledSTEs = a->getEnabledLastCycle();
+    std::queue <Element *> reportingSTEs = a->getReportedLastCycle();
 
-    // Add activated elements
-    while (!activatedSTEs.empty()) {
-      STE * s = activatedSTEs.back();
-      s->mark();
+    // Add all reporting elements first
+    while (!reportingSTEs.empty()) {
+      STE * s = static_cast<STE *>(reportingSTEs.front());
       tmp.push(s);
-      activatedSTEs.pop_back();
-      
-      if (s->isReporting()) {
+      reportingSTEs.pop();
+      // Always avoid duplicates
+      if (!s->isMarked()) { 
 	changedNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
-	      {"color", "rgb(255,0,255)"}
+	      {"count", std::to_string(enabledCount[s]) },	      
+		{"color", "rgb(255,0,255)"}
 	  });
 	reportNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
 	      {"rep_code", s->getReportCode() }
 	  });
       }
-      else {
-	changedNodes.push_back(json11::Json::object { 
-	    {"id", s->getId() },
-	      {"color", "rgb(0,255,0)"}
-	  });
-      }
+      s->mark();
     }
+    // Reload to unmark later
     while (!tmp.empty()) {
-      activatedSTEs.push_back(tmp.front());
+      reportingSTEs.push(tmp.front());
       tmp.pop();
     }
     
-
-    // *** ENABLE CHILDREN AND START STATES ***
-    // Get all enabled elements
-    a->enableSTEMatchingChildren();
-    a->enableStartStates();
-    Stack <Element *> enabledSTEs = a->getEnabledSTEs();
-    while (!enabledSTEs.empty()) {
-      STE * s = static_cast<STE *>(enabledSTEs.back());
+    // Add activated elements next
+    while (!activatedSTEs.empty()) {
+      STE * s = static_cast<STE *>(activatedSTEs.front());
       tmp.push(s);
-      enabledSTEs.pop_back();
-
+      activatedSTEs.pop();
+      // Avoid duplicates from reporting
       if (!s->isMarked())
 	changedNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
-	      {"color", "rgb(255,255,0)"}
+	      {"count", std::to_string(enabledCount[s]) },
+		{"color", "rgb(0,255,0)"}
 	  });
+      s->mark();
     }
+    // Reload to unmark later
     while (!tmp.empty()) {
-      enabledSTEs.push_back(tmp.front());
+      activatedSTEs.push(tmp.front());
       tmp.pop();
     }
-
-    // Unmark all activated elements
-    while (!activatedSTEs.empty()) {
-      STE * s = activatedSTEs.back();
-      s->unmark();
+    
+    // Finally, add all enabled elements
+    while (!enabledSTEs.empty()) {
+      STE * s = static_cast<STE *>(enabledSTEs.front());
       tmp.push(s);
-      activatedSTEs.pop_back();
+      enabledSTEs.pop();
+      // Avoid duplicates from activated
+      if (!s->isMarked())
+	changedNodes.push_back(json11::Json::object { 
+	    {"id", s->getId() },
+	      {"count", std::to_string(enabledCount[s]) },
+		{"color", "rgb(255,255,0)"}
+	  });
+      s->mark();
     }
+    
+    // Unmark all enabled, activated & reporting elements
     while (!tmp.empty()) {
-      activatedSTEs.push_back(tmp.front());
+      tmp.front()->unmark();
       tmp.pop();
     }
-
+    while (!activatedSTEs.empty()) {
+      STE * s = static_cast<STE *>(activatedSTEs.front());
+      s->unmark();
+      activatedSTEs.pop();
+    }
+    while (!reportingSTEs.empty()) {
+      STE * s = static_cast<STE *>(reportingSTEs.front());
+      s->unmark();
+      reportingSTEs.pop();
+    }
+    
+    // Output to file
     std::stringstream out;
     json11::Json json_object = json11::Json::object {
       {"nodes", changedNodes},

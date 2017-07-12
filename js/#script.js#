@@ -1,0 +1,230 @@
+
+// Graph neighbor function from Sigma.js
+sigma.classes.graph.addMethod('neighbors', function(nodeId) {
+    var k,
+    neighbors = {},
+    index = this.allNeighborsIndex[nodeId] || {};
+
+    for (k in index) {
+        neighbors[k] = this.nodesIndex[k];
+    }
+    return neighbors;
+});
+
+// Modified Graph neighbor function from Sigma.js
+sigma.classes.graph.addMethod('outEdges', function(nodeId) {
+    var k,
+    e,
+    outgoingEdges = {},
+    index = this.outNeighborsIndex[nodeId] || {};
+
+    for (k in index) {
+	for (e in this.outNeighborsIndex[nodeId][k]) {
+            outgoingEdges[e] = this.edgesIndex[e];
+	}
+    }
+    return outgoingEdges;
+});
+
+function toInt(n){ return Math.round(Number(n)); };
+
+var changedGraph = new sigma.classes.graph();
+var sig = new sigma();
+var heatMode = false;
+
+function loadGraph(json_object){
+    try {
+	sig.graph.clear();
+	sig.refresh();
+    } catch (e) {
+	console.log("Error clearing graph: " + e.message);
+    }
+    try {
+	sig = new sigma({
+	    renderer: {
+
+		container: document.getElementById('graph-container'),
+		// Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
+		//type: 'canvas'
+	    },
+	    settings: {
+		skipIndexation: true,
+		labelThreshold: 100,
+		hideEdgesOnMove: true,
+		zoomMin: .00001,
+		zoomMax: 2,
+		edgeColor: "default",
+		defaultEdgeColor: "#888",
+		maxNodeSize: 1,
+		minNodeSize: 0,
+		minEdgeSize: 0,
+		maxEdgeSize: .1,
+		minArrowSize: 1
+	    }
+	});
+	sig.graph.read(json_object);
+	
+	// Set sizes and save color of nodes
+
+	sig.graph.nodes().forEach(function(n) {
+	    n.size = "1";
+	    n.originalColor = n.color;
+	    n.oy = n.y;
+	    n.count = 1;
+	    if (heatMode)
+		n.color = "rgb(0,0,0)";
+	});
+	sig.graph.edges().forEach(function(e) {
+	    e.size = "0.05";
+	});
+
+	// Neighborhood clickability
+
+	sig.bind('clickNode', function(e) {
+
+	    var nodeId = e.data.node.id,
+	    toKeep = sig.graph.neighbors(nodeId);
+	    toKeep[nodeId] = e.data.node;
+
+	    sig.graph.nodes().forEach(function(n) {
+		if (toKeep[n.id])
+		    n.hidden = false;
+		else
+		    n.hidden = true;
+	    });
+
+	    sig.graph.edges().forEach(function(e) {
+		if (e.source == nodeId || e.target == nodeId) 
+		    e.hidden = false;
+		else
+		    e.hidden = true;
+	    });
+
+	    sig.refresh();
+	});
+
+	sig.bind('clickStage', function(e) {
+	    sig.graph.nodes().forEach(function(n) {
+		n.hidden = false;
+	    });
+
+	    sig.graph.edges().forEach(function(e) {
+		e.hidden = false;
+	    });
+
+	    sig.refresh();
+	});
+	
+	CustomShapes.init(sig);
+	sig.refresh();
+	$('#loading-graph-modal').modal('hide');
+    } catch (err) {
+	$('#loading-graph-modal').modal('hide');
+	alert(err.message);
+    }
+}
+
+
+
+function updateGraph(updateJson) {
+    // Revert the colors of all previously updated nodes and edges
+    
+    if (!heatMode) {
+    changedGraph.nodes().forEach(function (n) {
+	sig.graph.nodes(n.id).color = n.originalColor;
+    });
+    changedGraph.edges().forEach(function (e) {
+	sig.graph.edges(e.id).color = "#888";
+    });
+	}
+    changedGraph.clear();
+    
+    var changedNodesArray = updateJson.nodes;
+    // Make an array of node IDs from incoming data
+    var changedNodeIDs = [];
+    for (var i = 0; i < changedNodesArray.length; i++)
+	changedNodeIDs[i] = changedNodesArray[i].id;
+    // Get array containing references to actual graph nodes
+    var sigmaNodes = sig.graph.nodes(changedNodeIDs);
+    if (!heatMode)
+	// Add these nodes to changedGraph nodes
+	for (var i = 0; i < sigmaNodes.length; i++)
+	    changedGraph.addNode(sigmaNodes[i]);
+    for (var i = 0; i < sigmaNodes.length; i++) {
+	sigmaNodes[i].count++;
+	if (heatMode) 
+	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/sigmaNodes[i].count) + "," + Math.min(sigmaNodes[i].count-1, 255) + ",0)";
+	else
+	    sigmaNodes[i].color = changedNodesArray[i].color;
+	// If node is activated, light up outgoing edges
+	if (sigmaNodes[i].color == "rgb(0,255,0)" && !heatMode) {
+	    var outgoingEdges = sig.graph.outEdges(sigmaNodes[i].id);
+	    for (e in outgoingEdges) {
+		outgoingEdges[e].color = "#0f0";
+		changedGraph.addEdge(outgoingEdges[e]);
+	    }
+	}
+    }
+    sig.refresh();
+}
+
+// Graph manipulation controls
+
+function nodeSizeChange(val) {
+    var size = .125 * Math.pow(val, 1.5);
+    sig.settings('maxNodeSize', size);
+    sig.refresh();
+}
+
+function arrowSizeChange(val) {
+    sig.settings('minArrowSize', val);
+    sig.refresh();
+}
+
+function edgeSizeChange(val) {
+    var size = .00625 * Math.pow(val, 2);
+    sig.settings('maxEdgeSize', size);
+    sig.refresh();
+}
+
+function toggleEdges() {
+    if ($('#inrender-edge-box').is(':checked'))
+	sig.settings("drawEdges", true);
+    else 
+	sig.settings("drawEdges", false);
+
+    $('#edge-slider').toggle('disabled');
+    sig.refresh();
+}
+
+function toggleHeatMap() {
+    if ($('#inheat-mode-box').is(':checked')) {
+	heatMode = true;
+	sig.graph.nodes().forEach(function (n) {
+	    n.color = "rgb(" + toInt(255 - 255/n.count) + "," + Math.min(n.count-1, 255) + ",0)";
+	});
+	sig.graph.edges().forEach(function (e) {
+	    e.color = "#888";
+	});
+    }
+    else {
+	heatMode = false;
+	sig.graph.nodes().forEach(function (n) {
+	    n.color = n.originalColor;
+	});
+    }
+
+    sig.refresh();
+}
+
+function widthChange(val) {
+    console.log(val);
+    try {
+	sig.graph.nodes().forEach(function (n) {
+	    n.y = n.oy / 10 * (21-val);
+	});
+	sig.refresh();
+    } catch (e) {
+	console.log(e.message);
+    }
+}

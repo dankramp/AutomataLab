@@ -21,9 +21,5 @@ CXXFLAGS= -O3 -Iinclude -I$(LIBS)/include -L$(LIBS)/lib $(WT) -I$(MNRL)/include 
 CC=g++-5
 
 
-
-
-OBJ=VASimVis.cc $(LIBVASIM) $(JSON11_HPP)
-
-all: $(OBJ)
+all:
 	$(CC) -o $(TARGET) VASimVis.cc $(LIBVASIM) $(LIBMNRL) $(CXXFLAGS)

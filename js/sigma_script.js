@@ -39,11 +39,26 @@ var nodeSize = 1;
 var arrowSize = 5;
 var edgeSize = .1;
 var graphWidth = 1;
-//var simIndex = 0;
 
-function setCachedGraphs(json_object) {
+var simIndex = 0;
+var cache_length = 0;
+var cache_index = -1;
+var cache_fetch_size = 100;
+var playSim = false;
+var updatingCache = false;
+var input_length = 0;
+
+function setInputLength(length) {
+    input_length = length;
+}
+
+function setCachedGraphs(index, json_object) {
+    console.log("Setting cached graphs...");
     cachedGraphs = json_object;
-    //console.log("cached: " + JSON.stringify(cachedGraphs));
+    cache_length = cachedGraphs[0].length;
+    cache_index = index;
+    console.log("cache_length: " + cache_length + " cache_index = " + cache_index + " simIndex: " + simIndex);
+    updatingCache = false;
 }
 
 function loadCachedGraph(index) {
@@ -52,15 +67,6 @@ function loadCachedGraph(index) {
     //console.log("graph" + (cachedGraphs[0].length - index - 1) + ": " + JSON.stringify(graph));
     updateGraph(graph);
 }
-
-/*
- * For future use. Fully client-side simulation from cache
- *
-$('#sim-step-btn').click(function (){
-    simIndex++;
-    loadCachedGraph(simIndex);
-});
-*/
 
 function loadGraph(json_object){
     try {
@@ -103,7 +109,7 @@ function loadGraph(json_object){
 	    n.originalColor = n.color;
 	    n.oy = n.y;
 	    n.y = n.y * graphWidth;
-	    n.count = 1;
+	    n.count = 0;
 	    if (heatMode)
 		n.color = "rgb(0,0,0)";
 	});
@@ -157,30 +163,143 @@ function loadGraph(json_object){
     }
 
     //  Button listeners active after graph load
-    $('#reset-camera-btn').click(function(){
+    $('#reset-camera-btn').click(function() {
 	sigma.misc.animation.camera(
 	    sig.cameras[0],
 	    { ratio: 1, x: 0, y: 0, angle: 0 },
 	    { duration: 150 }
 	);
     });
+    $('#sim-step-btn').click(function() {
+	stepFromCache(1).then(function(response) {
+	    $('#sim-rev-btn').prop("disabled", false);
+	    $('#input-display-container').animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 300);
+	    if (simIndex == cache_index)
+		$('#sim-step-btn').prop("disabled", true);
+	}, function(reject) {
+	    console.log(reject);
+	});
+    });
+    $('#sim-rev-btn').prop("disabled", true);
+    $('#sim-rev-btn').click(function() {
+	stepFromCache(-1).then(function(response) {
+	    $('#sim-step-btn').prop("disabled", false);
+	    $('#input-display-container').animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 300);
+	    if (simIndex + cache_length - cache_index - 1 == 0)
+		$('#sim-rev-btn').prop("disabled", true);		
+	}, function(reject) {
+	    console.log(reject);
+	});
+	
+    });
+    $('#hidden-play-btn').click(function(){
+	stepFromCache(1).then(function(response) {
+	    $('#input-display-container').animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 0);
+	}, function(reject) {
+	    console.log(reject);
+	    clearInterval(interval);
+	    playSim = false;
+	    $('#sim-rev-btn').prop("disabled", false);
+	    $('#play-sim-btn').html("Play Simulation");
+	});
+    });
+    var interval = null;
+    $('#play-sim-btn').click(function() {
+	playSim ^= true;
+	if (playSim) {
+	    $('#play-sim-btn').html("Stop Simulation");
+	    $('#sim-step-btn').prop("disabled", true);
+	    $('#sim-rev-btn').prop("disabled", true);
+	}
+	else {
+	    $('#play-sim-btn').html("Play Simulation");
+	    $('#sim-step-btn').prop("disabled", false);
+	    $('#sim-rev-btn').prop("disabled", false);
+	    clearInterval(interval);
+	    console.log("Simindex = " + simIndex);
+	    return;
+	}
+	interval = setInterval(function() {
+	    $('#hidden-play-btn').click();
+	}, 1);
+
+    });
 }
 
+function stepFromCache(step_size) {
+    return new Promise(function(resolve, reject) {
+	var relativeIndex = simIndex + cache_length - cache_index - 1 + step_size;
+	console.log(relativeIndex);
+	if (relativeIndex >= cache_length || relativeIndex < 0) {
+	    reject("End of cache reached");
+	    return;
+	}
+	var table = document.getElementById("input-table");
+	if (simIndex >= 0) {
+	    table.rows[0].cells[simIndex].classList.remove("highlight");
+	    table.rows[1].cells[simIndex].classList.remove("highlight");	
+	}
+	simIndex += step_size;
 
+	table.rows[0].cells[simIndex].classList.add("highlight");
+	table.rows[1].cells[simIndex].classList.add("highlight");
+	
 
+	if (step_size > 0)
+	    for (var i = simIndex - step_size + 1; i <= simIndex; i++) {
+		var i_relativeIndex = i + cache_length - cache_index - 1;
+		if (cachedGraphs[0][i_relativeIndex]["rep_nodes"].length != 0) {
+		    var reports = "";
+		    for (var k = 0; k < cachedGraphs[0][i_relativeIndex]["rep_nodes"].length; k++) {
+			var node = cachedGraphs[0][i_relativeIndex]["rep_nodes"][k];
+			//console.log(node);
+			reports += "<p>" + node.id + ": " + node.rep_code + "</p>";
+		    }
+		    // Loading UTF and hex row with data
+		    for (var k = 0; k <= 1; k++) {
+			table.rows[k].cells[i].setAttribute("data-toggle", "popover");
+			table.rows[k].cells[i].setAttribute("title", "Reporting STEs");
+			table.rows[k].cells[i].setAttribute("data-content", reports);
+			table.rows[k].cells[i].setAttribute("data-trigger", "hover focus");
+			table.rows[k].cells[i].setAttribute("data-container", "body");
+			table.rows[k].cells[i].setAttribute("data-placement", "top");
+			table.rows[k].cells[i].setAttribute("data-html", "true");
+			table.rows[k].cells[i].classList.add("report");
+		    }
+		    $('[data-toggle="popover"]').popover();
+		}
+	    }
+	
+	loadCachedGraph(relativeIndex);
+	resolve("Loaded graph");
+	// To implement: cache reloading
+	if (!updatingCache && cache_index != input_length - 1 && cache_index - simIndex <= .25 * cache_fetch_size) {
+	    updatingCache = true;
+	    $('#hidden-cache-btn').click();
+	    console.log("Adding to cache");
+	}
+    });
+}
 
 function updateGraph(updateJson) {
-    //$('[data-toggle="tooltip"]').tooltip();
-    // Revert the colors of all previously updated nodes and edges
+    // Revert the colors of all previously updated nodes and 
+    //console.log(JSON.stringify(updateJson));
     var timer = new Date().getTime();
     if (!heatMode) {
-    changedGraph.nodes().forEach(function (n) {
-	sig.graph.nodes(n.id).color = n.originalColor;
-    });
-    changedGraph.edges().forEach(function (e) {
-	sig.graph.edges(e.id).color = "";
-    });
-	}
+	changedGraph.nodes().forEach(function (n) {
+	    sig.graph.nodes(n.id).color = n.originalColor;
+	});
+	changedGraph.edges().forEach(function (e) {
+	    sig.graph.edges(e.id).color = "";
+	});
+    }
+    /*
+    else {
+	changeGraph.nodes().forEach(function (n) {
+	    var node = sig.graph.nodes(n.id);
+	    node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
+	});
+    }*/
     changedGraph.clear();
     
     var changedNodesArray = updateJson.nodes;
@@ -190,14 +309,13 @@ function updateGraph(updateJson) {
 	changedNodeIDs[i] = changedNodesArray[i].id;
     // Get array containing references to actual graph nodes
     var sigmaNodes = sig.graph.nodes(changedNodeIDs);
-    if (!heatMode)
-	// Add these nodes to changedGraph nodes
-	for (var i = 0; i < sigmaNodes.length; i++)
-	    changedGraph.addNode(sigmaNodes[i]);
+    // Add these nodes to changedGraph nodes
+    for (var i = 0; i < sigmaNodes.length; i++)
+	changedGraph.addNode(sigmaNodes[i]);
     for (var i = 0; i < sigmaNodes.length; i++) {
-	sigmaNodes[i].count++;
+	sigmaNodes[i].count = parseInt(changedNodesArray[i].count);
 	if (heatMode) 
-	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/sigmaNodes[i].count) + "," + Math.min(sigmaNodes[i].count-1, 255) + ",0)";
+	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/(sigmaNodes[i].count+1)) + "," + Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
 	    sigmaNodes[i].color = changedNodesArray[i].color;
 	// If node is activated, light up outgoing edges
@@ -205,7 +323,12 @@ function updateGraph(updateJson) {
 	    var outgoingEdges = sig.graph.outEdges(sigmaNodes[i].id);
 	    for (e in outgoingEdges) {
 		outgoingEdges[e].color = "#0f0";
-		changedGraph.addEdge(outgoingEdges[e]);
+		try {
+		    changedGraph.addEdge(outgoingEdges[e]);
+		} catch (error) {
+		    console.log(error);
+		    console.log(outgoingEdges[e]);
+		}
 	    }
 	}
     }
@@ -248,7 +371,8 @@ function toggleHeatMap() {
     if ($('#inheat-mode-box').is(':checked')) {
 	heatMode = true;
 	sig.graph.nodes().forEach(function (n) {
-	    n.color = "rgb(" + toInt(255 - 255/n.count) + "," + Math.min(n.count-1, 255) + ",0)";
+	    n.color = "rgb(" + toInt(255 - 255/(n.count+1)) + "," + Math.min(n.count, 255) + ",0)";
+	    //console.log(n.color);
 	});
 	sig.graph.edges().forEach(function (e) {
 	    e.color = "#888";
