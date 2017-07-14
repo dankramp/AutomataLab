@@ -137,6 +137,7 @@ class SigmaJSONWriter {
     // Output to file
     std::stringstream out;
     json11::Json json_object = json11::Json::object {
+      {"symbol", std::string(1, (char)symbol) },
       {"nodes", changedNodes},
       {"rep_nodes", reportNodes }
     };

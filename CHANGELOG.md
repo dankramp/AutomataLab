@@ -1,5 +1,19 @@
 # ANMLViewer Changelog
 
+### 1.13 - release (7/14/17)
+- Improved interactivity of character stream
+  - Greyed out characters are not in the cache and therefore cannot be reached (unless simulating forward)
+  - Characters in the cache can be clicked on and the corresponding simulation step will be shown
+    - If a user jumps past a reporting step, the character will still turn purple in the character stream
+- URL can handle GET data to send pre-optimized ANMLZoo automata in the following format: `?a=AutomataName&o=3bitOptCode`
+  - Example: appending `?a=Brill&o=100` will preload Brill with a global optimization (other bits are local opt/remove OR gates)
+- Added new features to Simulation Tools:
+  - 'Cycle Index' counter displays current cycle count
+  - 'Stop on Report' checkbox will stop a simulation that is being played if it reaches a reporting step
+  - 'Download Report Record' button will save a file called 'reports.txt' that contains information about all reporting STEs for all previously and currently cached steps
+- Added 'Type Input' feature near input upload to manually enter an input stream
+- Fixed bugs with uploading new files after starting simulation
+	
 ### 1.12 - release (7/10/17)
 - Added "Play Speed" range slider to add delay to between simulation steps
   - 'Fastest' adds no delay; 'Slowest' adds 2 seconds between steps

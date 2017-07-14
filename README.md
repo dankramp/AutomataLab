@@ -27,11 +27,11 @@ Then in your browser, navigate to the link provided by Wt:
     - Drag screen to reposition graph
     - Change the node display size, arrow size, edge thickness, and graph width in the "Graph Settings" tab at the bottom
     - Toggle "Render Edges" setting for faster render times and manipulation of the view
-    - Toggle "Heat Map Mode" to see the nodes colored based on number of times the node has been enabled
-    - Hover over a node to see its symbol set, or click to see all connected nodes
+    - Toggle "Heat Map Mode" to see the nodes colored based on number of times the STE has been enabled
+    - Hover over a node to see its symbol set, or click to see all connected STEs
     - Click "Reset Camera" to reset view to initial zoom and position
     - The header at the top can be hidden/shown at any time by clicking the bar along its bottom edge
-4. Select a local text input file to simulate on (if an ANMLZoo file was chosen, the text file will have already been loaded but can be overwritten by uploading another).
+4. Select a local text input file to simulate on (if an ANMLZoo file was chosen, the text file will have already been loaded but can be overwritten by uploading another) or type your own custom input.
 5. The text file is displayed as a character stream along the bottom of the simulation window, displaying up to the first 1000 characters.
 6. Once both the automata file and text file are loaded, click "Simulate >>" in the header to begin simulating the automata.
     - The character that is currently being simulated on is highlighted yellow in the character stream
@@ -41,4 +41,6 @@ Then in your browser, navigate to the link provided by Wt:
     - Play the simulation forward by pressing "Play Simulation"
     - Toggle displaying the character stream as hex values using the "Hex Char Mode" check box
     - View the ID and report code of all reporting STEs on any given character by hovering over characters that are highlighted purple
+    - Jump to a specific step in the cache by clicking darkened characters in the character stream
+    - Save a file containing information about all reported STEs by clicking "Download Report Record"
 8. Selecting a new automata or input file will reset the simulation and allow the user to restart without refreshing the page.

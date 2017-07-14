@@ -1,3 +1,18 @@
+.click-index:link {
+    text-decoration: inherit;
+    display: block;
+    color: black;
+    cursor: auto;
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+}
+.click-index:visited {
+    text-decoration: inherit;
+    color: black;
+    cursor: auto;
+}
+
 .collapse-bar {
     background-color: #ddd;
     text-align: center;
@@ -6,6 +21,9 @@
 }
 .collapse-bar:hover {
     background-color: #ccc;
+}
+.cycle-counter {
+    font-size: 20px;
 }
 .fixed-header {
     position: fixed;
@@ -59,14 +77,19 @@
     height: 30px;
     text-align: center;
     background: white;
+    color: #888;
     border: 1px solid gray;
     vertical-align: middle;
 }
 .input-display td.highlight {
     background-color: yellow;
+    font-weight: bold;
 }
 .input-display td.report {
     background-color: #ff77ff;
+}
+.input-display td.report.highlight {
+    background-color: #ffdd99;
 }
 .input-display-table {
     border: 1px solid gray;
