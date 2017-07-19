@@ -21,14 +21,15 @@ Then in your browser, navigate to the link provided by Wt:
 
 ## How To Use
 1. Select a local automata file (.anml/.mnrl) or a preset ANMLZoo file from the drop down.
-2. Choose which optimizations to apply to the automata and click "Generate".
+2. Choose which (optional) optimizations to apply to the automata and click "Generate".
 3. The automata is displayed and the user may interact with it in a number of ways:
     - Zoom in/out using scroll wheel or touch-screen methods
     - Drag screen to reposition graph
-    - Change the node display size, arrow size, edge thickness, and graph width in the "Graph Settings" tab at the bottom
+    - Change the node display size, edge thickness, and graph width/height ratio in the "Graph Settings" tab at the bottom
     - Toggle "Render Edges" setting for faster render times and manipulation of the view
     - Toggle "Heat Map Mode" to see the nodes colored based on number of times the STE has been enabled
-    - Hover over a node to see its symbol set, or click to see all connected STEs
+    - Hover over a node to see its metadata such as id, symbol set, reporting code and start type (where applicable)
+    - Click a node to view all of its descendants
     - Click "Reset Camera" to reset view to initial zoom and position
     - The header at the top can be hidden/shown at any time by clicking the bar along its bottom edge
 4. Select a local text input file to simulate on (if an ANMLZoo file was chosen, the text file will have already been loaded but can be overwritten by uploading another) or type your own custom input.
@@ -39,6 +40,8 @@ Then in your browser, navigate to the link provided by Wt:
     - Step backward/forward one character in the stream using the "<< Step" and "Step >>" respectively
     - The user may step backwards until the beginning of the cache is reached; forward simulation can occur until the end of the input stream
     - Play the simulation forward by pressing "Play Simulation"
+        - Control play speed (delay time) by utilizing the "Play Speed" slider
+        - Stop the simulation on a reporting state by checking "Stop on Report"
     - Toggle displaying the character stream as hex values using the "Hex Char Mode" check box
     - View the ID and report code of all reporting STEs on any given character by hovering over characters that are highlighted purple
     - Jump to a specific step in the cache by clicking darkened characters in the character stream

@@ -1,15 +1,30 @@
 
 // Graph neighbor function from Sigma.js
-sigma.classes.graph.addMethod('neighbors', function(nodeId) {
+sigma.classes.graph.addMethod('neighbors', function(nodeId, connectedNodes) {
+
     var k,
-    neighbors = {},
-    index = this.allNeighborsIndex[nodeId] || {};
+    index = this.outNeighborsIndex[nodeId] || {};
+    connectedNodes[nodeId] = sig.graph.nodes(nodeId);
 
     for (k in index) {
-        neighbors[k] = this.nodesIndex[k];
+	if (!connectedNodes[k])
+	    connectedNodes = sig.graph.neighbors(k, connectedNodes);
     }
-    return neighbors;
+    return connectedNodes;    
+
 });
+
+function recursiveOutNeighbor(nodeId, connectedNodes) {
+    var k,
+    index = this.outNeighborsIndex[nodeId] || {};
+    connectedNodes[nodeId] = sig.graph.nodes(nodeId);
+
+    for (k in index) {
+	if (!connectedNodes[k])
+	    connectedNodes = recursiveOutNeighbor(k, connectedNodes);
+    }
+    return connectedNodes;    
+}
 
 
 // Modified Graph neighbor function from Sigma.js
@@ -34,13 +49,16 @@ var sig = new sigma();
 var cachedGraphs;
 var initialLoad = true;
 
+// Graph settings variables
 var heatMode = false;
 var draw_edges = true;
 var nodeSize = 1;
 var arrowSize = 5;
 var edgeSize = .1;
 var graphWidth = 1;
+var graphHeight = 10;
 
+// Simulation variables
 var simIndex = 0;
 var cache_length = 0;
 var cache_index = -1;
@@ -51,6 +69,188 @@ var updatingCache = false;
 var input_length = 0;
 var stopSimOnReport = false;
 var reportRecord = "";
+var textFile = null;
+
+// DOM elements
+var $download_rep_btn; 
+var $play_sim_btn;
+var $sim_step_btn;
+var $sim_rev_btn;
+var $hidden_play_btn;
+var $input_display_container;
+var $table;
+
+// Called on page load
+function pageLoad() {
+
+    $download_rep_btn = $('#dl-rep-btn');
+    $play_sim_btn = $('#play-sim-btn');
+    $sim_step_btn = $('#sim-step-btn');
+    $sim_rev_btn = $('#sim-rev-btn');
+    $hidden_play_btn = $('#hidden-play-btn');
+    $input_display_container = $('#input-display-container');
+
+    $table = $("#input-table");
+
+    $('input[type=range]').on('input', function() {
+	$(this).trigger('change');
+    });
+    $('#node-slider').change( function() {
+	nodeSizeChange($(this).val());
+    });
+    $('#edge-slider').change( function() {
+	edgeSizeChange($(this).val());
+    });
+    $('#width-slider').change( function() {
+	widthChange($(this).val());
+    });
+    $('#speed-slider').change( function() {
+	var val = $(this).val();
+	speed = val;
+	if (playSim) {
+	    $play_sim_btn.html("Play Simulation");
+	    $sim_step_btn.prop("disabled", false);
+	    $sim_rev_btn.prop("disabled", false);
+	    clearInterval(interval);
+	    playSim = false;
+	}
+	if (val == 0)
+	    $('#play-speed-text').html("Play Speed: Fastest");
+	else if (val >= -.3)
+	    $('#play-speed-text').html("Play Speed: Fast");
+	else if (val >= -.8)
+	    $('#play-speed-text').html("Play Speed: Medium");	
+	else if (val >= -1.8)
+	    $('#play-speed-text').html("Play Speed: Slow");
+	else
+	    $('#play-speed-text').html("Play Speed: Slowest");
+    });
+    $('#inhex-mode-box').click(function() {
+	$table.find('tr').toggle();
+    });
+    $('#instop-sim-report-box').click(function() {
+	stopSimOnReport = document.getElementById('instop-sim-report-box').checked;
+    });
+    $('#reset-camera-btn').click(function() {
+	sigma.misc.animation.camera(
+	    sig.cameras[0],
+	    { ratio: 1, x: 0, y: 0, angle: 0 },
+	    { duration: 150 }
+	);
+    });
+    $sim_step_btn.click(function() {
+	stepFromCache(1).then(function(response) {
+	    $sim_rev_btn.prop("disabled", false);
+	    $input_display_container.animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 300);
+	    if (simIndex == cache_index)
+		$sim_step_btn.prop("disabled", true);
+	}, function(reject) {
+	    console.log(reject);
+	});
+    });
+    $sim_rev_btn.prop("disabled", true);
+    $sim_rev_btn.click(function() {
+	stepFromCache(-1).then(function(response) {
+	    $sim_step_btn.prop("disabled", false);
+	    $play_sim_btn.prop("disabled", false);
+	    $input_display_container.animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 300);
+	    if (simIndex + cache_length - cache_index - 1 == 0)
+		$sim_rev_btn.prop("disabled", true);		
+	}, function(reject) {
+	    console.log(reject);
+	});
+	
+    });
+    $hidden_play_btn.click(function(){
+	stepFromCache(1).then(function(resolve) {
+	    $input_display_container.animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 0);
+	}, function(reject) {
+	    //console.log(reject);
+	    clearInterval(interval);
+	    playSim = false;
+	    if (reject == "stop on report") 
+		$sim_step_btn.prop("disabled", false);
+	    $sim_rev_btn.prop("disabled", false);
+	    $play_sim_btn.html("Play Simulation");
+	});
+
+    });
+    var interval = null;
+    $play_sim_btn.click(function() {
+	playSim ^= true;
+	if (playSim) {
+	    $play_sim_btn.html("Stop Simulation");
+	    $sim_step_btn.prop("disabled", true);
+	    $sim_rev_btn.prop("disabled", true);
+	}
+	else {
+	    $play_sim_btn.html("Play Simulation");
+	    $sim_step_btn.prop("disabled", false);
+	    $sim_rev_btn.prop("disabled", false);
+	    clearInterval(interval);
+	    return;
+	}
+	interval = setInterval(function() {
+	    $hidden_play_btn.click();
+	}, speed*-1000 + 1);
+
+    });
+
+    sig = new sigma({
+	renderer: {
+
+	    container: document.getElementById('graph-container'),
+	    // Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
+	    // type: 'canvas'
+	},
+	settings: {
+	    skipIndexation: true,
+	    labelThreshold: 100,
+	    hideEdgesOnMove: true,
+	    //batchEdgesDrawing: true, doesn't render edges farther in graph
+	    zoomMin: .00001,
+	    zoomMax: 2,
+	    edgeColor: "default",
+	    drawEdges: draw_edges,
+	    defaultEdgeColor: "#888",
+	    defaultEdgeType: "arrow",
+	    defaultNodeType: "fast",
+	    maxNodeSize: nodeSize,
+	    minNodeSize: 0,
+	    minEdgeSize: 0,
+	    maxEdgeSize: edgeSize,
+	    minArrowSize: arrowSize,
+	    nodesPowRatio: 1,
+	    edgesPowRatio: 1
+	}
+    });
+
+    // Neighborhood clickability
+
+    sig.bind('clickNode', function(e) {
+	var nodeId = e.data.node.id,
+	toKeep = sig.graph.neighbors(nodeId, {});
+	toKeep[nodeId] = e.data.node;
+
+	sig.graph.nodes().forEach(function(n) {
+	    if (toKeep[n.id])
+		n.hidden = false;
+	    else
+		n.hidden = true;
+	});
+
+	sig.refresh({skipIndexation: true});
+    });
+
+    sig.bind('clickStage', function(e) {
+	sig.graph.nodes().forEach(function(n) {
+	    n.hidden = false;
+	});
+
+	sig.refresh({skipIndexation: true});
+    });
+    
+}
 
 function resetSimulation() {
     simIndex = 0;
@@ -62,26 +262,22 @@ function resetSimulation() {
     cachedGraphs = {};
     changedGraph.clear();
     reportRecord = "";
+    $download_rep_btn.hide();
+    textFile = null;
+    $table = $('#input-table');
 }
 
 function setInputLength(length) {
     input_length = length;
 }
 
-function copyReportRecord() {
-    //window.prompt("Copy report record to clipboard: Ctrl+C, Enter", reportRecord);
-    var download = window.prompt("Would you like to download a .txt file of the report record so far?");
-    
-}
-
-var textFile = null;
 function makeTextFile() {
     var data = new Blob([reportRecord], {type: 'text/plain'});
 
     // If we are replacing a previously generated file we need to
     // manually revoke the object URL to avoid memory leaks.
     if (textFile !== null) {
-      window.URL.revokeObjectURL(textFile);
+	window.URL.revokeObjectURL(textFile);
     }
 
     textFile = window.URL.createObjectURL(data);
@@ -90,42 +286,62 @@ function makeTextFile() {
 }
 
 function setCachedGraphs(index, json_object) {
+    var prevIndex = cache_index,
+    i,
+    k;
     // Reset clickability of previous graphs
     $('a.click-index').contents().unwrap();
-
+    
     cachedGraphs = json_object;
     cache_length = cachedGraphs[0].length;
-    var prevIndex = cache_index;
     cache_index = index;
     updatingCache = false;
-  
+    
     // Make new range of cache clickable
-    var table = document.getElementById("input-table");
-    for (var i = cache_index - cache_length + 1; i <= cache_index; i++) {
-	var innerText = table.rows[0].cells[i].innerHTML;
-	var innerHex = table.rows[1].cells[i].innerHTML;
-	table.rows[0].cells[i].innerHTML = "<a href='#' class='click-index' onClick='indexClick(" + i + ")'>" + innerText + "</a>";
-	table.rows[1].cells[i].innerHTML = "<a href='#' class='click-index' onClick='indexClick(" + i + ")'>" + innerHex + "</a>";
-    }
-    for (var i = cache_length - cache_index + prevIndex; i<cache_length; i++) {
+    $table.find('tr').each(function(index, row) {
+	$(row).find('td').slice(cache_index - cache_length + 1, cache_index + 1).children().each(function(i, e) {
+	    $(e).wrap("<a href='#' class='click-index' onClick='indexClick(" + i + ")'></a>");
+	});
+    });
+    // Update report record and character stream to reflect reports
+    for (i = cache_length - cache_index + prevIndex; i<cache_length; i++) {
 	// Add reporting nodes to record
 	if (cachedGraphs[0][i]["rep_nodes"].length != 0) {
-	    reportRecord += "Reporting on '" + cachedGraphs[0][i].symbol + "' @cycle " + (cache_index - cache_length + i + 1) + ":\n";
-	    //alert("got to 1 and i=" + i);
-	    for (var k = 0; k < cachedGraphs[0][i]["rep_nodes"].length; k++) {
-		//alert("got to 2 and k=" + k);
+	    $download_rep_btn.show();
+	    var abs_i = cache_index - cache_length + i + 1;
+
+	    reportRecord += "Reporting on '" + cachedGraphs[0][i].symbol + "' @cycle " + abs_i + ":\n";
+	    var reports = "";
+	    var rep_length = cachedGraphs[0][i]["rep_nodes"].length;
+	    for (k = 0; k < rep_length; k++) {
 		var node = cachedGraphs[0][i]["rep_nodes"][k]; 
 		reportRecord += "\tid: " + node.id + "  report code: " + node.rep_code + "\n";
+		reports += "<p>" + node.id + ": " + node.rep_code + "</p>";
 	    }
-	}
-	    
+
+	    // Loading UTF and hex row with data
+
+	    $table.find('tr').each(function(i, e) {
+		var cell = $(e).find('td').eq(abs_i);
+		cell.attr("data-toggle", "popover");
+		cell.attr("title", "Reporting STEs @" + abs_i);
+		cell.attr("data-content", reports);
+		cell.attr("data-trigger", "hover focus");
+		cell.attr("data-container", "body");
+		cell.attr("data-placement", "top");
+		cell.attr("data-html", "true");
+		cell.addClass("report");
+	    });
+	    $('[data-toggle="popover"]').popover();
+	}	
     }
     
-    $("#dl-rep-btn").attr({href: makeTextFile()});
+    $download_rep_btn.attr({href: makeTextFile()});
     
     // Enable forward sim buttons
-    $('#sim-step-btn').prop("disabled", false);
-    $('#play-sim-btn').prop("disabled", false);
+    if (!playSim)
+	$sim_step_btn.prop("disabled", false);
+    $play_sim_btn.prop("disabled", false);
 
 }
 
@@ -133,33 +349,29 @@ function indexClick(index) {
     
     // Disable/enable sim buttons
     if (index == cache_index) { // end of cache; disable moving forward 
-	$('#sim-step-btn').prop("disabled", true);
-	$('#play-sim-btn').prop("disabled", true);
+	$sim_step_btn.prop("disabled", true);
+	$play_sim_btn.prop("disabled", true);
     }
     else { // otherwise enable
-	$('#sim-step-btn').prop("disabled", false);
-	$('#play-sim-btn').prop("disabled", false);
+	$sim_step_btn.prop("disabled", false);
+	$play_sim_btn.prop("disabled", false);
     }
     if (index == cache_index - cache_length + 1) // beginning of cache; disable moving back
-	$('#sim-rev-btn').prop("disabled", true);
+	$sim_rev_btn.prop("disabled", true);
     else // otherwise enable
-	$('#sim-rev-btn').prop("disabled", false);
+	$sim_rev_btn.prop("disabled", false);
 
     stepFromCache(index - simIndex);
 
 }
 
-function loadCachedGraph(index) {
-    var graph = cachedGraphs[0][index];
-    updateGraph(graph);
-}
-
 function loadGraph(json_object){
-
-    nodeSizeChange($('#node-slider').val());
-    arrowSizeChange($('#arrow-slider').val());
+    
+    nodeSizeChange($('#node-slider').val());    
     edgeSizeChange($('#edge-slider').val());
     widthChange($('#width-slider').val());
+     
+    $download_rep_btn.hide();
 
     try {
 	sig.graph.clear();
@@ -168,30 +380,7 @@ function loadGraph(json_object){
 	console.log("Error clearing graph: " + e.message);
     }
     try {
-	sig = new sigma({
-	    renderer: {
-
-		container: document.getElementById('graph-container'),
-		// Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
-		//type: 'canvas'
-	    },
-	    settings: {
-		skipIndexation: true,
-		labelThreshold: 100,
-		hideEdgesOnMove: true,
-		//batchEdgesDrawing: true, doesn't render edges farther in graph
-		zoomMin: .00001,
-		zoomMax: 2,
-		edgeColor: "default",
-		drawEdges: draw_edges,
-		defaultEdgeColor: "#888",
-		maxNodeSize: nodeSize,
-		minNodeSize: 0,
-		minEdgeSize: 0,
-		maxEdgeSize: edgeSize,
-		minArrowSize: arrowSize
-	    }
-	});
+	
 	sig.graph.read(json_object);
 	
 	// Set sizes and save color of nodes
@@ -199,8 +388,8 @@ function loadGraph(json_object){
 	sig.graph.nodes().forEach(function(n) {
 	    n.size = "1";
 	    n.originalColor = n.color;
-	    n.oy = n.y;
-	    n.y = n.y * graphWidth;
+	    n.ox = n.x;
+	    n.x = n.x * graphWidth;
 	    n.count = 0;
 	    if (heatMode)
 		n.color = "rgb(0,0,0)";
@@ -209,220 +398,40 @@ function loadGraph(json_object){
 	    e.size = "0.05";
 	});
 
-	// Neighborhood clickability
-
-	sig.bind('clickNode', function(e) {
-
-	    var nodeId = e.data.node.id,
-	    toKeep = sig.graph.neighbors(nodeId);
-	    toKeep[nodeId] = e.data.node;
-
-	    sig.graph.nodes().forEach(function(n) {
-		if (toKeep[n.id])
-		    n.hidden = false;
-		else
-		    n.hidden = true;
-	    });
-
-	    sig.graph.edges().forEach(function(e) {
-		if (e.source == nodeId || e.target == nodeId) 
-		    e.hidden = false;
-		else
-		    e.hidden = true;
-	    });
-
-	    sig.refresh();
-	});
-
-	sig.bind('clickStage', function(e) {
-	    sig.graph.nodes().forEach(function(n) {
-		n.hidden = false;
-	    });
-
-	    sig.graph.edges().forEach(function(e) {
-		e.hidden = false;
-	    });
-
-	    sig.refresh();
-	});
-	
-	CustomShapes.init(sig);
 	sig.refresh();
 	$('#loading-graph-modal').modal('hide');
     } catch (err) {
 	$('#loading-graph-modal').modal('hide');
 	alert(err.message);
     }
-
-    //  Button listeners active after graph loads first time
-    if (initialLoad) {
-	initialLoad = false;
-	$('input[type=range]').on('input', function() {
-	    $(this).trigger('change');
-	});
-	$('#node-slider').change( function() {
-	    nodeSizeChange($(this).val());
-	});
-	$('#arrow-slider').change( function() {
-	    arrowSizeChange($(this).val());
-	});
-	$('#edge-slider').change( function() {
-	    edgeSizeChange($(this).val());
-	});
-	$('#width-slider').change( function() {
-	    widthChange($(this).val());
-	});
-	$('#speed-slider').change( function() {
-	    var val = $(this).val();
-	    speed = val;
-	    if (playSim) {
-		$('#play-sim-btn').html("Play Simulation");
-		$('#sim-step-btn').prop("disabled", false);
-		$('#sim-rev-btn').prop("disabled", false);
-		clearInterval(interval);
-		playSim = false;
-	    }
-	    if (val == 0)
-		$('#play-speed-text').html("Play Speed: Fastest");
-	    else if (val >= -.3)
-		$('#play-speed-text').html("Play Speed: Fast");
-	    else if (val >= -.8)
-		$('#play-speed-text').html("Play Speed: Medium");	
-	    else if (val >= -1.8)
-		$('#play-speed-text').html("Play Speed: Slow");
-	    else
-		$('#play-speed-text').html("Play Speed: Slowest");
-	});
-	$('#inhex-mode-box').click(function() {
-	    if (document.getElementById('inhex-mode-box').checked) {
-		$('#input-table tr:eq(0)').hide();
-		$('#input-table tr:eq(1)').show();
-	    }
-	    else {
-		$('#input-table tr:eq(0)').show();
-		$('#input-table tr:eq(1)').hide();
-	    }
-	});
-	$('#instop-sim-report-box').click(function() {
-	    stopSimOnReport = document.getElementById('instop-sim-report-box').checked;
-	    copyReportRecord();
-	});
-	$('#reset-camera-btn').click(function() {
-	    sigma.misc.animation.camera(
-		sig.cameras[0],
-		{ ratio: 1, x: 0, y: 0, angle: 0 },
-		{ duration: 150 }
-	    );
-	});
-	$('#sim-step-btn').click(function() {
-	    stepFromCache(1).then(function(response) {
-		$('#sim-rev-btn').prop("disabled", false);
-		$('#input-display-container').animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 300);
-		if (simIndex == cache_index)
-		    $('#sim-step-btn').prop("disabled", true);
-	    }, function(reject) {
-		console.log(reject);
-	    });
-	});
-	$('#sim-rev-btn').prop("disabled", true);
-	$('#sim-rev-btn').click(function() {
-	    stepFromCache(-1).then(function(response) {
-		$('#sim-step-btn').prop("disabled", false);
-		$('#play-sim-btn').prop("disabled", false);
-		$('#input-display-container').animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 300);
-		if (simIndex + cache_length - cache_index - 1 == 0)
-		    $('#sim-rev-btn').prop("disabled", true);		
-	    }, function(reject) {
-		console.log(reject);
-	    });
-	    
-	});
-	$('#hidden-play-btn').click(function(){
-	    stepFromCache(1).then(function(response) {
-		$('#input-display-container').animate({scrollLeft: simIndex % 1000 * 30 - $(window).width()/2}, 0);
-	    }, function(reject) {
-		console.log(reject);
-		clearInterval(interval);
-		playSim = false;
-		$('#sim-rev-btn').prop("disabled", false);
-		$('#play-sim-btn').html("Play Simulation");
-	    });
-
-	});
-	var interval = null;
-	$('#play-sim-btn').click(function() {
-	    playSim ^= true;
-	    if (playSim) {
-		$('#play-sim-btn').html("Stop Simulation");
-		$('#sim-step-btn').prop("disabled", true);
-		$('#sim-rev-btn').prop("disabled", true);
-	    }
-	    else {
-		$('#play-sim-btn').html("Play Simulation");
-		$('#sim-step-btn').prop("disabled", false);
-		$('#sim-rev-btn').prop("disabled", false);
-		clearInterval(interval);
-		return;
-	    }
-	    interval = setInterval(function() {
-		$('#hidden-play-btn').click();
-	    }, speed*-1000 + 1);
-
-	});
-    }
+    
 }
 
 function stepFromCache(step_size) {
     return new Promise(function(resolve, reject) {
 	var relativeIndex = simIndex + cache_length - cache_index - 1 + step_size;
 	if (relativeIndex >= cache_length || relativeIndex < 0) {
-	    reject("End of cache reached");
+	    if (updatingCache)
+		resolve("updating cache...continue simulation");
+	    else
+		reject("End of cache reached");
 	    return;
 	}
 	// Setting table cells to reflect changed simIndex
-	var table = document.getElementById("input-table");
-	if (simIndex >= 0) {
-	    table.rows[0].cells[simIndex].classList.remove("highlight");
-	    table.rows[1].cells[simIndex].classList.remove("highlight");	
-	}
+	if (simIndex >= 0)
+	    $table.find('tr').find('td:eq(' + simIndex + ')').removeClass("highlight");
+	 
 	simIndex += step_size;
 	$('#cycle-index-text').html("" + simIndex);
+	
+	$table.find('tr').find('td:eq(' + simIndex + ')').addClass("highlight");
+	updateGraph(cachedGraphs[0][relativeIndex]);
 
-	table.rows[0].cells[simIndex].classList.add("highlight");
-	table.rows[1].cells[simIndex].classList.add("highlight");
-	
-	// Load all reported steps that were skipped
-	if (step_size > 0)
-	    for (var i = simIndex - step_size + 1; i <= simIndex; i++) {
-		var i_relativeIndex = i + cache_length - cache_index - 1;
-		if (cachedGraphs[0][i_relativeIndex]["rep_nodes"].length != 0) {
-		    // If stopSimOnReport and the simulation is playing, stop it
-		    if (stopSimOnReport && playSim) {
-			$('#play-sim-btn').click();
-		    }
-		    var reports = "";
-		    for (var k = 0; k < cachedGraphs[0][i_relativeIndex]["rep_nodes"].length; k++) {
-			var node = cachedGraphs[0][i_relativeIndex]["rep_nodes"][k];
-			//console.log(node);
-			reports += "<p>" + node.id + ": " + node.rep_code + "</p>";
-		    }
-		    // Loading UTF and hex row with data
-		    for (var k = 0; k <= 1; k++) {
-			table.rows[k].cells[i].setAttribute("data-toggle", "popover");
-			table.rows[k].cells[i].setAttribute("title", "Reporting STEs");
-			table.rows[k].cells[i].setAttribute("data-content", reports);
-			table.rows[k].cells[i].setAttribute("data-trigger", "hover focus");
-			table.rows[k].cells[i].setAttribute("data-container", "body");
-			table.rows[k].cells[i].setAttribute("data-placement", "top");
-			table.rows[k].cells[i].setAttribute("data-html", "true");
-			table.rows[k].cells[i].classList.add("report");
-		    }
-		    $('[data-toggle="popover"]').popover();
-		}
-	    }
-	
-	loadCachedGraph(relativeIndex);
-	resolve("Loaded graph");
+	if (stopSimOnReport && cachedGraphs[0][relativeIndex]["rep_nodes"].length > 0)
+	    reject("stop on report");
+	else	    
+	    resolve("Loaded graph");
+
 	// Cache reloading
 	if (!updatingCache && cache_index != input_length - 1 && cache_index - simIndex <= .25 * cache_fetch_size) {
 	    updatingCache = true;
@@ -444,12 +453,12 @@ function updateGraph(updateJson) {
 	});
     }
     /*
-    else {
-	changeGraph.nodes().forEach(function (n) {
-	    var node = sig.graph.nodes(n.id);
-	    node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
-	});
-    }*/
+      else {
+      changeGraph.nodes().forEach(function (n) {
+      var node = sig.graph.nodes(n.id);
+      node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
+      });
+      }*/
     changedGraph.clear();
     
     var changedNodesArray = updateJson.nodes;
@@ -463,7 +472,8 @@ function updateGraph(updateJson) {
     for (var i = 0; i < sigmaNodes.length; i++)
 	changedGraph.addNode(sigmaNodes[i]);
     for (var i = 0; i < sigmaNodes.length; i++) {
-	sigmaNodes[i].count = parseInt(changedNodesArray[i].count);
+	// Update count only if it is higher than before -- no backwards traversal for heat map
+	sigmaNodes[i].count = Math.max(parseInt(changedNodesArray[i].count), sigmaNodes[i].count);
 	if (heatMode) 
 	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/(sigmaNodes[i].count+1)) + "," + Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
@@ -489,19 +499,13 @@ function updateGraph(updateJson) {
 // Graph manipulation controls
 
 function nodeSizeChange(val) {
-    nodeSize = .125 * Math.pow(val, 1.5);
+    nodeSize = .1 * Math.pow(1.1, val);
     sig.settings('maxNodeSize', nodeSize);
     sig.refresh({skipIndexation: true});
 }
 
-function arrowSizeChange(val) {
-    arrowSize = val;
-    sig.settings('minArrowSize', val);
-    sig.refresh({skipIndexation: true});
-}
-
 function edgeSizeChange(val) {
-    edgeSize = .00625 * Math.pow(val, 2);
+    edgeSize = .005 * Math.pow(1.2, val);
     sig.settings('maxEdgeSize', edgeSize);
     sig.refresh({skipIndexation: true});
 }
@@ -539,9 +543,9 @@ function toggleHeatMap() {
 }
 
 function widthChange(val) {
-    graphWidth = (21-val) / 10;
+    graphWidth = Math.pow(1.1, val);
     sig.graph.nodes().forEach(function (n) {
-	n.y = n.oy * graphWidth;
+	n.x = n.ox * graphWidth;
     });
-    sig.refresh({skipIndexation: true});
+    sig.refresh();
 }

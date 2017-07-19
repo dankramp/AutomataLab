@@ -25,6 +25,9 @@
 .cycle-counter {
     font-size: 20px;
 }
+.error-text {
+    color: red;
+}
 .fixed-header {
     position: fixed;
     top: 0;

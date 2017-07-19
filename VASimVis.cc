@@ -8,6 +8,8 @@
 #include <Wt/WCheckBox>
 #include <Wt/WEnvironment>
 #include <Wt/WFileUpload>
+#include <Wt/WIntValidator>
+#include <Wt/WLineEdit>
 #include <Wt/WLink>
 #include <Wt/WPushButton>
 #include <Wt/WSlider>
@@ -22,6 +24,7 @@
 
 #include "automata.h"
 #include "SigmaJSONWriter.h"
+#include "RandomGraph.h"
 #include <json11.hpp>
 
 class VASimViz : public Wt::WApplication
@@ -31,7 +34,8 @@ public:
   void newFileUploaded();
   void loadTextFromFile(std::string fn);
   void loadInputTable();
-  void handleAutomataFile(bool global, bool local, bool OR, std::string fn);
+  void handleAutomataFile(bool global, bool OR, std::string fn, int32_t fanin_limit=-1, int32_t fanout_limit=-1);
+  void loadRandomAutomata();
   std::string simulateAutomata(char symbol);
   void beginSimulation();
   void addToJSCache(int numGraphs);
@@ -93,20 +97,18 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.fast.js");
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.fast.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.labels.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.hovers.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.nodes.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curve.js");
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.def.js");
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curve.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.arrow.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curve.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.extremities.def.js");  
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js");
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js");
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curve.js");
+  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js");
   /*
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.utils.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.nodes.def.js");
@@ -122,9 +124,11 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/sigma.js/src/misc/sigma.misc.bindDOMEvents.js");
   Wt::WApplication::instance()->require("/sigma.js/src/misc/sigma.misc.drawHovers.js");
   // Sigma plugins
-  Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.parsers.json/sigma.parsers.json.js");
-  Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.renderers.customShapes/shape-library.js");
-  Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js");
+  //Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.parsers.json/sigma.parsers.json.js");
+  //Wt::WApplication::instance()->require("/sigma.js/build/plugins/sigma.layout.forceAtlas2.min.js");
+
+  //Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.renderers.customShapes/shape-library.js");
+  //  Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js");
   
 
   /**
@@ -159,7 +163,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   error_modal_content->setStyleClass("modal-content");
   Wt::WContainerWidget *error_modal_header = new Wt::WContainerWidget(error_modal_content);
   error_modal_header->setStyleClass("modal-header");
-  error_modal_header->addWidget(new Wt::WText("<h3 class=\"modal-title\">Simulation Error</h3>"));
+  error_modal_header->addWidget(new Wt::WText("<h3 class=\"modal-title\">Error</h3>"));
   Wt::WContainerWidget *error_modal_body = new Wt::WContainerWidget(error_modal_content);
   error_modal_body->setStyleClass("modal-body");
   Wt::WText *error_modal_message = new Wt::WText(error_modal_body);
@@ -245,6 +249,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   anmlzoo_combo->addItem("SPM");
   anmlzoo_combo->addItem("Synthetic");
   anmlzoo_combo->addItem("Donut");
+  //anmlzoo_combo->addItem("Random");
   anmlzoo_combo->setCurrentIndex(0);
   anmlzoo_combo->setMargin(10, Wt::Right);
 
@@ -380,13 +385,25 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WContainerWidget *options_modal_fg1 = new Wt::WContainerWidget(options_modal_body);
   options_modal_fg1->setStyleClass("form-group");
   Wt::WCheckBox *global_opt_check = new Wt::WCheckBox(" Global Optimization", options_modal_fg1);
-  //options_modal_fg1->addWidget(new Wt::WText("<label for='global-opt' class='control-label'>Global Optimization</label>"));
   Wt::WContainerWidget *options_modal_fg2 = new Wt::WContainerWidget(options_modal_body);
   options_modal_fg2->setStyleClass("form-group");
-  Wt::WCheckBox *local_opt_check = new Wt::WCheckBox(" Local Optimization", options_modal_fg2);
+  Wt::WCheckBox *remove_or_check = new Wt::WCheckBox(" Remove OR Gates", options_modal_fg2);
   Wt::WContainerWidget *options_modal_fg3 = new Wt::WContainerWidget(options_modal_body);
   options_modal_fg3->setStyleClass("form-group");
-  Wt::WCheckBox *remove_or_check = new Wt::WCheckBox(" Remove OR Gates", options_modal_fg3);
+  Wt::WText *fan_in_text = new Wt::WText("<b>Fan-In Limit: </b>", options_modal_fg3);
+  Wt::WLineEdit *fan_in_input = new Wt::WLineEdit(options_modal_fg3);
+  Wt::WText *fan_in_error = new Wt::WText(options_modal_fg3);
+  fan_in_error->setStyleClass("error-text");
+  Wt::WIntValidator *int_validator = new Wt::WIntValidator();
+  int_validator->setBottom(1);
+  fan_in_input->setValidator(int_validator);
+  Wt::WContainerWidget *options_modal_fg4 = new Wt::WContainerWidget(options_modal_body);
+  options_modal_fg4->setStyleClass("form-group");
+  Wt::WText *fan_out_text = new Wt::WText("<b>Fan-Out Limit: </b>", options_modal_fg4);
+  Wt::WLineEdit *fan_out_input = new Wt::WLineEdit(options_modal_fg4);
+  Wt::WText *fan_out_error = new Wt::WText(options_modal_fg4);
+  fan_out_error->setStyleClass("error-text");
+  fan_out_input->setValidator(int_validator);
     
   // Buttons
   Wt::WContainerWidget *options_modal_footer = new Wt::WContainerWidget(options_modal_content);
@@ -400,8 +417,28 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WPushButton *generate_options_modal_button = new Wt::WPushButton("Generate", options_modal_footer);
   generate_options_modal_button->setStyleClass("btn btn-primary");
   generate_options_modal_button->clicked().connect(std::bind( [=]() {
-	doJavaScript("$('#options-modal').modal('hide');");
-	handleAutomataFile(global_opt_check->isChecked(), local_opt_check->isChecked(), remove_or_check->isChecked(), fn);
+	if (fan_in_input->validate() != Wt::WValidator::Valid)
+	  fan_in_error->setText(" * Enter a valid number > 0");
+	else
+	  fan_in_error->setText("");
+	if (fan_out_input->validate() != Wt::WValidator::Valid)
+	  fan_out_error->setText(" * Enter a valid number > 0");
+	else
+	  fan_out_error->setText("");
+
+	if (fan_in_input->validate() == Wt::WValidator::Valid && fan_out_input->validate() == Wt::WValidator::Valid) {
+	  doJavaScript("$('#options-modal').modal('hide');");
+	  int fan_in = (fan_in_input->text().toUTF8().length() > 0) ? std::stoi(fan_in_input->text().toUTF8()) : 0;
+	  int fan_out = (fan_out_input->text().toUTF8().length() > 0) ? std::stoi(fan_out_input->text().toUTF8()) : 0;
+	  handleAutomataFile(global_opt_check->isChecked(), remove_or_check->isChecked(), fn, fan_in, fan_out);
+	  fan_in_error->setText("");
+	  fan_out_error->setText("");
+	  fan_in_input->setText("");
+	  fan_out_input->setText("");
+	  global_opt_check->setCheckState(Wt::CheckState::Unchecked);
+	  remove_or_check->setCheckState(Wt::CheckState::Unchecked);
+	}
+
       }));
     
    
@@ -446,41 +483,35 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   footer_table->setStyleClass("footer-table");
   // Table Headers
   footer_table->elementAt(0,0)->addWidget(new Wt::WText("Node Size: "));
-  footer_table->elementAt(0,1)->addWidget(new Wt::WText("Arrow Size: "));
-  footer_table->elementAt(0,2)->addWidget(new Wt::WText("Edge Thickness: "));
-  Wt::WCheckBox *disable_edges = new Wt::WCheckBox(" Render Edges?", footer_table->elementAt(0,3));
+  footer_table->elementAt(0,1)->addWidget(new Wt::WText("Edge Thickness: "));
+  Wt::WCheckBox *disable_edges = new Wt::WCheckBox(" Render Edges?", footer_table->elementAt(0,2));
   disable_edges->setId("render-edge-box");
   disable_edges->setChecked(true);
   disable_edges->setAttributeValue("onclick", "toggleEdges()");
-  Wt::WCheckBox *heat_mode_check = new Wt::WCheckBox(" Heat Map Mode", footer_table->elementAt(1,3));
+  Wt::WCheckBox *heat_mode_check = new Wt::WCheckBox(" Heat Map Mode", footer_table->elementAt(1,2));
   heat_mode_check->setId("heat-mode-box");
   heat_mode_check->setChecked(false);
   heat_mode_check->setAttributeValue("onclick", "toggleHeatMap()");
-  Wt::WPushButton *reset_camera_btn = new Wt::WPushButton("Reset Camera", footer_table->elementAt(0,5));
+  footer_table->elementAt(0,3)->addWidget(new Wt::WText("Width/Height Ratio"));
+  Wt::WPushButton *reset_camera_btn = new Wt::WPushButton("Reset Camera", footer_table->elementAt(0,4));
   reset_camera_btn->setStyleClass("btn btn-primary");
   reset_camera_btn->setId("reset-camera-btn");
 
-  footer_table->elementAt(0,4)->addWidget(new Wt::WText("Graph Width"));
-  
   footer_table->elementAt(0,0)->setStyleClass("footer-text");
   footer_table->elementAt(0,1)->setStyleClass("footer-text");
   footer_table->elementAt(0,2)->setStyleClass("footer-text");
+  footer_table->elementAt(1,2)->setStyleClass("footer-text");
   footer_table->elementAt(0,3)->setStyleClass("footer-text");
-  footer_table->elementAt(1,3)->setStyleClass("footer-text");
   footer_table->elementAt(0,4)->setStyleClass("footer-text");
-  footer_table->elementAt(0,5)->setStyleClass("footer-text");
 
   // Table footers/inputs
-  Wt::WText *node_slider = new Wt::WText("<input type='range' min='1' max='20' step='1' value='4' id='node-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,0));
-  Wt::WText *arrow_slider = new Wt::WText("<input type='range' min='0' max='10' step='1' value='1' id='arrow-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,1));
-  Wt::WText *edge_slider = new Wt::WText("<input type='range' min='1' max='15' step='1' value='4' id='edge-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,2));
-  Wt::WText *width_slider = new Wt::WText("<input type='range' min='1' max='20' step='1' value='10' id='width-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,4));
+  Wt::WText *node_slider = new Wt::WText("<input type='range' min='0' max='57' step='1' value='25' id='node-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,0));
+  Wt::WText *edge_slider = new Wt::WText("<input type='range' min='0' max='40' step='1' value='13' id='edge-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,1));
+  Wt::WText *width_slider = new Wt::WText("<input type='range' min='0' max='55' step='1' value='12' id='width-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,3));
 
   footer_table->elementAt(1,0)->setStyleClass("footer-text");
   footer_table->elementAt(1,1)->setStyleClass("footer-text");
-  footer_table->elementAt(1,2)->setStyleClass("footer-text");
-  footer_table->elementAt(1,4)->setStyleClass("footer-text");
-  
+  footer_table->elementAt(1,3)->setStyleClass("footer-text");
 
   // ************************ //
   // *** SIMULATION TOOLS *** //
@@ -612,8 +643,9 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	}
 	// Unsupported file type
 	else {
-	  modal_message->setText("File type unsupported.");
-	  modal_title->setText("<h3 class=\"modal-title\">Error creating graph</h3>");
+	  doJavaScript("$('#loading-graph-modal').modal('hide');");
+	  error_modal_message->setText("Invalid automata file.");
+	  doJavaScript("$('#error-modal').modal('show');");
 	  validAutomata = false;
 	}
 	
@@ -637,19 +669,29 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	loadTextFromFile(""+file_vector.data()->spoolFileName());
 
       }));
+  // Load DOM elements on page
+  processEvents();
+  doJavaScript("pageLoad()");
 
   // Load queries in following format:
-  // ?a=AutomataName&o=ddd where ddd is bool value of global, local, and or optimizations
-  // Brill:100 means load Brill with global opt
+  // ?a=AutomataName&o=dd&fi=n&fo=m where dd is bool value of global and or optimizations and n and m are numbers
+  // ?a=Brill&o=10&fo=5 means load Brill with global opt and fan-out limit of 5
   auto paramMap = env.getParameterMap();
   if (paramMap.find("a") != paramMap.end()) {
     // Load graph with name given at a=,
     // bring up optimization menu only if no opt code is provided
-    bool optQ = paramMap.find("o") != paramMap.end();
+    bool optQ = paramMap.find("o") != paramMap.end() || paramMap.find("fi") != paramMap.end() || paramMap.find("fo") != paramMap.end();
     loadDemoGraph(paramMap["a"][0], !optQ);
     if (optQ) {
-      std::string optCode = paramMap["o"][0];
-      handleAutomataFile(optCode[0] == '1', optCode[1] == '1', optCode[2] == '1', fn);
+      std::string optCode;
+      int fi = 0, fo = 0;
+      if (paramMap.find("o") != paramMap.end())
+	optCode = paramMap["o"][0];
+      if (paramMap.find("fi") != paramMap.end())
+	fi = std::stoi(paramMap["fi"][0]);
+      if (paramMap.find("fo") != paramMap.end())
+	fo = std::stoi(paramMap["fo"][0]);
+      handleAutomataFile(optCode[0] == '1', optCode[1] == '1', fn, fi, fo);
     }
   }
 
@@ -715,34 +757,43 @@ void VASimViz::loadInputTable() {
  * Initializes global automata object with user-defined settings
  * Loads automata as graph via Javascript to Sigma.js
  */
-void VASimViz::handleAutomataFile(bool global, bool local, bool OR, std::string fn) 
+void VASimViz::handleAutomataFile(bool global,  bool OR, std::string fn, int32_t fanin_limit, int32_t fanout_limit) 
 {
+  std::cout << "Fan-in limit: " << fanin_limit << ", Fan-out limit: " << fanout_limit << std::endl;
   // Create Automata object from file
   std::cout << "STATUS: CREATING AUTOMATA OBJECT FROM FILE" << std::endl;
   modal_message->setText("Creating Automata object from file...");
   doJavaScript("$('#loading-graph-modal').modal('show')");
   processEvents();
+
   Automata a(fn);
   ap = a;
   validAutomata = true;
   uint32_t automata_size = ap.getElements().size();
-  uint32_t orig_automata_size = ap.getElements().size();
   
   modal_message->setText("Processing optimizations...");
   processEvents();
 
-  // Optimizations
+  // Left Minimization
   if (global) {
-    ap.leftMinimize();
-        
+    ap.leftMinimize();        
     while(automata_size != ap.getElements().size()) {
       automata_size = ap.getElements().size();
       ap.leftMinimize();
     }
   }
-  if (OR) {
+
+  // Remove OR gates, which are just syntactic sugar (benefitial for some hardware)
+  if(OR)
     ap.removeOrGates();
-  }
+
+  // Enforce fan-in limit
+  if(fanin_limit > 0)
+    ap.enforceFanIn(fanin_limit);
+
+  // Enforce fan-out limit
+  if(fanout_limit > 0)
+    ap.enforceFanOut(fanout_limit);
 
   ap.enableProfile();
 
@@ -758,6 +809,17 @@ void VASimViz::handleAutomataFile(bool global, bool local, bool OR, std::string 
   std::cout << "STATUS: LOADING GRAPH IN SIGMA" << std::endl;
   doJavaScript("loadGraph("+json_string+")");
   
+}
+
+/*
+
+ */
+void VASimViz::loadRandomAutomata() {
+  ap = RandomAutomata::generateRandomAutomata();
+  ap.enableProfile();
+  std::string json_string = SigmaJSONWriter::writeToJSON(&ap);
+  //  std::cout << json_string << std::endl;
+  doJavaScript("loadGraph(" + json_string + ")");
 }
 
 /*
@@ -889,7 +951,13 @@ void VASimViz::loadDemoGraph(std::string name, bool userLoaded) {
     fn = "Donut/donut.anml";
     anmlzoo_combo->setCurrentIndex(14);
   }
+  else if (name == "Random") {
+    loadRandomAutomata();
+    userLoaded = false;
+    anmlzoo_combo->setCurrentIndex(15);
+  }
 
+  //url("?a=" + name);
   if (userLoaded) {
     doJavaScript("$('#loading-graph-modal').modal('hide');");
     doJavaScript("$('#options-modal').modal('show');");

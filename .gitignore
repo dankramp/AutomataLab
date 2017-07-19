@@ -9,3 +9,6 @@
 # Ignore autosaves
 *~
 *#
+
+# Ignore specific files
+RandomGraph.h

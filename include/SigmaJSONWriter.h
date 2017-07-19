@@ -24,7 +24,7 @@ class SigmaJSONWriter {
 
     // Loop through all starting elements
     for (auto element : a->getStarts()) {
-      xPos = positionChildren(element, xPos, 0, n, e);
+      positionChildren(element, xPos, 0, n, e);
       xPos++;
     }
     
@@ -35,8 +35,8 @@ class SigmaJSONWriter {
     // Creating and outputting JSON object as string
     std::stringstream out;
     json11::Json json_object = json11::Json::object {
-	{"nodes", n},
-	  {"edges", e}
+      {"nodes", n},
+      {"edges", e}
     };
     out << nlohmann::json::parse(json_object.dump()).dump(4) << std::endl;
     
@@ -148,7 +148,7 @@ class SigmaJSONWriter {
   }
  private:
   static int positionChildren (Element *parent, 
-			       int xPos, 
+			       int &xPos, 
 			       int y, 
 			       std::vector<json11::Json> &n, 
 			       std::vector<json11::Json> &e) {
@@ -174,7 +174,11 @@ class SigmaJSONWriter {
 	color = "rgb(158,185,212)";
       //color= "#9eb9d4";
       
-      label = static_cast<STE *>(parent)->getSymbolSet();
+      label = "id: " + parent->getId() + "\nss: " + static_cast<STE *>(parent)->getSymbolSet();
+      if (parent->isReporting())
+	label += "\nreport code: " + parent->getReportCode();
+      if (static_cast<STE *>(parent)->isStart())
+	label += "\nstart: " + static_cast<STE *>(parent)->getStringStart();
       break;
     case ElementType::OR_T:
       color = "rgb(255,0,255)";
@@ -204,13 +208,13 @@ class SigmaJSONWriter {
 	std::cout << "*** (Base Case) Adding STE '" << parent->getId() << "' with xPos=" << std::to_string(xPos) << std::endl;
       // Add this node with all current info
       n.push_back(json11::Json::object{
-	{"id", parent->getId() },
-	  {"label", label },
-	    {"color", color },
-	      {"x", std::to_string(xPos) },
-		{"y", std::to_string(y) }, 
-		  {"type", "fast"}
-      });
+	  {"id", parent->getId() },
+	    {"label", label },
+	      {"color", color },
+		{"x", std::to_string(xPos) },
+		  {"y", std::to_string(y) }
+	});
+      return xPos;
     }
 
     // Recursive case
@@ -226,31 +230,33 @@ class SigmaJSONWriter {
 	
 	if (DEBUG) 
 	  std::cout << "Running loop on '" << parent->getId() << "'s child '" << child->getId() << "' with xPos=" << std::to_string(xPos) << std::endl;
-	
-	std::string type = "arrow";
-	// Self-loop handling
-	if (child->getId() == parent->getId())
-	  type = "curveArrow";
+	/*
+	  std::string type = "arrow";
+	  // Self-loop handling
+	  if (child->getId() == parent->getId())
+	  
+	  type = "curveArrow";*/
+
 	// Only run recursive call if not a self-loop
-	else
-	  xPos = positionChildren(child, xPos, y+10, n, e);
+	int positionOfChild = xPos;
+	if (child->getId() != parent->getId())
+	  positionOfChild = positionChildren(child, xPos, y+30, n, e);
 	
 	e.push_back(json11::Json::object {
 	    {"id", "e"+std::to_string(e.size()) },
 	      {"source", parent->getId() },
-		{"target", child->getId() },
-		  {"type", type}
+		{"target", child->getId() }
 	  });
 
         // low = xPos of first element
 	if (&item == &outputs.front()) {
-	  low = xPos;
+	  low = positionOfChild;
 	  if (DEBUG) 
 	    std::cout << "'low' of '" << parent->getId() << " after child loop on '" << child->getId() << "' = " << std::to_string(low) << std::endl;
 	}
 	// high = xPos of last element
 	if (&item == &outputs.back()) {
-	  high = xPos;
+	  high = positionOfChild;
 	  if (DEBUG) 
 	    std::cout << "'high' of '" << parent->getId() << " after child loop on '" << child->getId() << "' = " << std::to_string(high) << std::endl;
 	}
@@ -266,21 +272,20 @@ class SigmaJSONWriter {
       xPos--;
 
       
-    n.push_back(json11::Json::object{
-	{"id", parent->getId() },
-	  {"label", label },
-	    {"color", color },
-	      {"x", std::to_string((low + high + 1)/2) },
-		{"y", std::to_string(y) },
-		  {"type", "fast"}
-      });
+      n.push_back(json11::Json::object{
+	  {"id", parent->getId() },
+	    {"label", label },
+	      {"color", color },
+		{"x", std::to_string((low + high + 1)/2) },
+		  {"y", std::to_string(y) }
+	});
 
-    if (DEBUG) 
-      std::cout << "*** Adding STE '" << parent->getId() << "' with xPos=" << std::to_string((low+high+1)/2) << std::endl;
+      if (DEBUG) 
+	std::cout << "*** Adding STE '" << parent->getId() << "' with xPos=" << std::to_string((low+high+1)/2) << std::endl;
 
+      return (low + high + 1)/2;
     }
 
-    return xPos;
   }
 
  private:
