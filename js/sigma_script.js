@@ -300,7 +300,7 @@ function setCachedGraphs(index, json_object) {
     // Make new range of cache clickable
     $table.find('tr').each(function(index, row) {
 	$(row).find('td').slice(cache_index - cache_length + 1, cache_index + 1).children().each(function(i, e) {
-	    $(e).wrap("<a href='#' class='click-index' onClick='indexClick(" + i + ")'></a>");
+	    $(e).wrap("<a href='#' class='click-index' onClick='indexClick(" + (cache_index - cache_length + i + 1) + ")'></a>");
 	});
     });
     // Update report record and character stream to reflect reports
