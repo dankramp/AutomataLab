@@ -1,6 +1,6 @@
 
 // Graph neighbor function from Sigma.js
-sigma.classes.graph.addMethod('neighbors', function(nodeId, connectedNodes) {
+sigma.classes.graph.addMethod('children', function(nodeId, connectedNodes) {
 
     var k,
     index = this.outNeighborsIndex[nodeId] || {};
@@ -8,7 +8,7 @@ sigma.classes.graph.addMethod('neighbors', function(nodeId, connectedNodes) {
 
     for (k in index) {
 	if (!connectedNodes[k])
-	    connectedNodes = sig.graph.neighbors(k, connectedNodes);
+	    connectedNodes = sig.graph.children(k, connectedNodes);
     }
     return connectedNodes;    
 
@@ -44,19 +44,28 @@ sigma.classes.graph.addMethod('outEdges', function(nodeId) {
 
 function toInt(n){ return Math.round(Number(n)); };
 
-var changedGraph = new sigma.classes.graph();
 var sig = new sigma();
+var changedGraph = new sigma.classes.graph();
 var cachedGraphs;
 var initialLoad = true;
+var locate_plugin;
+var tooltips;
+var activeState;
+var dragListener;
+var select;
+var keyboard;
+var lasso;
+var rectSelect;
 
-// Graph settings variables
+// Graph settings variable defaults
 var heatMode = false;
 var draw_edges = true;
 var nodeSize = 1;
 var arrowSize = 5;
 var edgeSize = .1;
-var graphWidth = 1;
+var graphWidth = 12;
 var graphHeight = 10;
+var editor_mode = false;
 
 // Simulation variables
 var simIndex = 0;
@@ -80,6 +89,8 @@ var $hidden_play_btn;
 var $input_display_container;
 var $table;
 
+var graph_container;
+
 // Called on page load
 function pageLoad() {
 
@@ -89,6 +100,10 @@ function pageLoad() {
     $sim_rev_btn = $('#sim-rev-btn');
     $hidden_play_btn = $('#hidden-play-btn');
     $input_display_container = $('#input-display-container');
+
+    graph_container = document.getElementById("graph-container");
+    graph_container.style.top = document.getElementById("click-collapse-bar").offsetHeight + "px";
+    graph_container.style.height = "calc(100% - " + document.getElementsByClassName("footer")[0].offsetHeight + "px - " + document.getElementById("click-collapse-bar").offsetHeight + "px)";
 
     $table = $("#input-table");
 
@@ -103,6 +118,9 @@ function pageLoad() {
     });
     $('#width-slider').change( function() {
 	widthChange($(this).val());
+    });
+    $('#angle-slider').change( function() {
+	rotationChange($(this).val());
     });
     $('#speed-slider').change( function() {
 	var val = $(this).val();
@@ -128,15 +146,20 @@ function pageLoad() {
     $('#inhex-mode-box').click(function() {
 	$table.find('tr').toggle();
     });
+    $('#inheat-mode-box').click(function() {
+	toggleHeatMap();
+    });
     $('#instop-sim-report-box').click(function() {
 	stopSimOnReport = document.getElementById('instop-sim-report-box').checked;
     });
     $('#reset-camera-btn').click(function() {
-	sigma.misc.animation.camera(
-	    sig.cameras[0],
-	    { ratio: 1, x: 0, y: 0, angle: 0 },
-	    { duration: 150 }
-	);
+	resetCamera();
+    });
+    $('#toggle-lasso-btn').click(function() {
+	toggleLasso();
+    });
+    $('#toggle-rect-btn').click(function() {
+	toggleRect();
     });
     $sim_step_btn.click(function() {
 	stepFromCache(1).then(function(response) {
@@ -179,12 +202,12 @@ function pageLoad() {
     $play_sim_btn.click(function() {
 	playSim ^= true;
 	if (playSim) {
-	    $play_sim_btn.html("Stop Simulation");
+	    $play_sim_btn.html("Stop Simulation <span class='glyphicon glyphicon-pause' aria-hidden='true'></span>");
 	    $sim_step_btn.prop("disabled", true);
 	    $sim_rev_btn.prop("disabled", true);
 	}
 	else {
-	    $play_sim_btn.html("Play Simulation");
+	    $play_sim_btn.html("Play Simulation <span class='glyphicon glyphicon-play' aria-hidden='true'></span>");
 	    $sim_step_btn.prop("disabled", false);
 	    $sim_rev_btn.prop("disabled", false);
 	    clearInterval(interval);
@@ -199,15 +222,14 @@ function pageLoad() {
     sig = new sigma({
 	renderer: {
 
-	    container: document.getElementById('graph-container'),
+	    container: document.getElementById('graph-container')
 	    // Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
-	    // type: 'canvas'
+	    // type: 'webgl'
 	},
 	settings: {
 	    skipIndexation: true,
 	    labelThreshold: 100,
 	    hideEdgesOnMove: true,
-	    //batchEdgesDrawing: true, doesn't render edges farther in graph
 	    zoomMin: .00001,
 	    zoomMax: 2,
 	    edgeColor: "default",
@@ -219,36 +241,62 @@ function pageLoad() {
 	    minNodeSize: 0,
 	    minEdgeSize: 0,
 	    maxEdgeSize: edgeSize,
-	    minArrowSize: arrowSize,
 	    nodesPowRatio: 1,
-	    edgesPowRatio: 1
+	    edgesPowRatio: 1,
+	    sideMargin: 5,
+	    borderSize: 2,
+	    nodeQuadTreeMaxLevel: 8,
+	    edgeQuadTreeMaxLevel: 8,
+	    // Plugin stuff
+	    dragNodeStickiness: 1,
+	    enableEdgeHovering: false,
+	    edgeHoverHighlightNodes: 'circle',
+	    mouseEnabled: true,
+	    touchEnabled: true,
+	    defaultNodeActiveBorderColor: '#ff7',
+	    nodeBorderSize: 0,
+	    nodeActiveBorderSize: 2
 	}
     });
 
-    // Neighborhood clickability
+    locate_plugin = sigma.plugins.locate(sig);
 
-    sig.bind('clickNode', function(e) {
-	var nodeId = e.data.node.id,
-	toKeep = sig.graph.neighbors(nodeId, {});
-	toKeep[nodeId] = e.data.node;
+    var config = {
+	node: [ 
+	    {
+		show: 'rightClickNode',
+		cssClass: 'sigma-tooltip',
+		position: 'right',
+		template:
+		'<ul class="custom-menu">' +
+		    '<div class="hover-info"><p>ID: {{id}}</p>' +
+		    '<p>Symbol Set: {{data.ss}}</p>' +
+		    '<p>{{data.start}}</p>' +
+		    '<p>{{data.rep_code}}</p></div>' +
+		    '<li onClick="toggleChildren(\'{{id}}\')">Show/Hide Children</li>' +
+		    '<li onClick="soloChildren(\'{{id}}\')">Solo Children</li>' +
+		    '<li onClick="printNodeData(\'{{id}}\')">- Print Node Data -</li>' +
+		    '</ul>',
+		renderer: function(node, template) {
+		    return Mustache.render(template, node);
+		}
+	    }
+	],
+	stage: {
+	    template:
+	    '<ul class="custom-menu">' +
+		'<li onClick="openSearchBar()">Search By ID</li>' +
+		'<li onClick="showAllNodes()">Show All Nodes</li>' +
+		'<li onClick="toggleEditorMode()">Toggle Editor Mode</li>' +
+		'<li onClick="resetCamera()">Reset Camera</li>' +
+		'</ul>'
+	}
+    };
+    tooltips = sigma.plugins.tooltips(sig, sig.renderers[0], config);
 
-	sig.graph.nodes().forEach(function(n) {
-	    if (toKeep[n.id])
-		n.hidden = false;
-	    else
-		n.hidden = true;
-	});
+    sig.bind('clickStage', function() {tooltips.close()});
 
-	sig.refresh({skipIndexation: true});
-    });
-
-    sig.bind('clickStage', function(e) {
-	sig.graph.nodes().forEach(function(n) {
-	    n.hidden = false;
-	});
-
-	sig.refresh({skipIndexation: true});
-    });
+    sig.refresh();
     
 }
 
@@ -265,6 +313,8 @@ function resetSimulation() {
     $download_rep_btn.hide();
     textFile = null;
     $table = $('#input-table');
+    $('#angle-slider').val(0);
+    graph_container.style.height = "calc(100% - " + document.getElementsByClassName("footer")[0].offsetHeight + "px - " + document.getElementById("click-collapse-bar").offsetHeight + "px)";
 }
 
 function setInputLength(length) {
@@ -300,7 +350,7 @@ function setCachedGraphs(index, json_object) {
     // Make new range of cache clickable
     $table.find('tr').each(function(index, row) {
 	$(row).find('td').slice(cache_index - cache_length + 1, cache_index + 1).children().each(function(i, e) {
-	    $(e).wrap("<a href='#' class='click-index' onClick='indexClick(" + (cache_index - cache_length + i + 1) + ")'></a>");
+	    $(e).wrap("<a href='#' onClick='indexClick(" + (cache_index - cache_length + i + 1) + ")'></a>");
 	});
     });
     // Update report record and character stream to reflect reports
@@ -366,7 +416,7 @@ function indexClick(index) {
 }
 
 function loadGraph(json_object){
-    
+
     nodeSizeChange($('#node-slider').val());    
     edgeSizeChange($('#edge-slider').val());
     widthChange($('#width-slider').val());
@@ -380,22 +430,22 @@ function loadGraph(json_object){
 	console.log("Error clearing graph: " + e.message);
     }
     try {
-	
+	sig.cameras[0].goTo({angle: 0});
 	sig.graph.read(json_object);
 	
 	// Set sizes and save color of nodes
 
 	sig.graph.nodes().forEach(function(n) {
-	    n.size = "1";
+	    n.size = 1;
 	    n.originalColor = n.color;
-	    n.ox = n.x;
-	    n.x = n.x * graphWidth;
+	    n.x = n.x * Math.pow(1.1, graphWidth);
+	    n.y = ~~n.y;
 	    n.count = 0;
 	    if (heatMode)
 		n.color = "rgb(0,0,0)";
 	});
 	sig.graph.edges().forEach(function(e) {
-	    e.size = "0.05";
+	    e.size = 0.05;
 	});
 
 	sig.refresh();
@@ -500,14 +550,37 @@ function updateGraph(updateJson) {
 
 function nodeSizeChange(val) {
     nodeSize = .1 * Math.pow(1.1, val);
+    if (editor_mode)
+	sig.graph.nodes().forEach(function (n) {
+	    n.size = nodeSize;
+	});
     sig.settings('maxNodeSize', nodeSize);
+    sig.settings('zoomMin', nodeSize/80);
     sig.refresh({skipIndexation: true});
 }
 
 function edgeSizeChange(val) {
     edgeSize = .005 * Math.pow(1.2, val);
+    if (editor_mode)
+	sig.graph.edges().forEach(function (e) {
+	    e.size = edgeSize;
+	});
     sig.settings('maxEdgeSize', edgeSize);
     sig.refresh({skipIndexation: true});
+}
+
+function widthChange(val) {
+    var ratio = Math.pow(1.1, val - graphWidth);
+    sig.graph.nodes().forEach(function (n) {
+	n.x *= ratio;
+    });
+    graphWidth = val;
+    sig.refresh();
+}
+
+function rotationChange(val) {
+    sig.cameras[0].goTo({angle: -1 * Math.PI / 180 * parseInt(val)});
+    sig.refresh();
 }
 
 function toggleEdges() {
@@ -542,10 +615,210 @@ function toggleHeatMap() {
     sig.refresh({skipIndexation: true});
 }
 
-function widthChange(val) {
-    graphWidth = Math.pow(1.1, val);
-    sig.graph.nodes().forEach(function (n) {
-	n.x = n.ox * graphWidth;
+function openSearchBar() {
+    tooltips.close();
+    $('#search-modal').modal('show');
+}
+
+function resetCamera() {
+    tooltips.close();
+    sigma.misc.animation.camera(
+	sig.cameras[0],
+	{ ratio: 1, x: 0, y: 0, angle: 0 },
+	{ duration: 150 }
+    );
+    console.log(sig.cameras[0]);
+    $('#angle-slider').val(0);
+}
+
+function toggleChildren(nodeId) {
+    tooltips.close();
+    toKeep = sig.graph.children(nodeId, {});
+
+    var hidden = true,
+    k;
+    // If any are visible, hide all; else show all
+    for (k in toKeep)
+	if (!toKeep[k].hidden && k != nodeId) {
+	    hidden = false;
+	    break;
+	}
+ 
+    sig.graph.nodes().forEach(function(n) {
+	if (toKeep[n.id] && nodeId !=  n.id)
+	    n.hidden = !hidden;
     });
-    sig.refresh();
+
+    sig.refresh({skipIndexation: true});
+
+}
+
+function soloChildren(nodeId) {
+    tooltips.close();
+    toKeep = sig.graph.children(nodeId, {});
+    toKeep[nodeId] = sig.graph.nodes(nodeId);
+ 
+    sig.graph.nodes().forEach(function(n) {
+	if (toKeep[n.id])
+	    n.hidden = false;
+	else
+	    n.hidden = true;
+    });
+
+    sig.refresh({skipIndexation: true});
+
+}
+
+function showAllNodes() {
+    tooltips.close();
+    sig.graph.nodes().forEach(function(n) {
+	n.hidden = false;
+    });
+
+    sig.refresh({skipIndexation: true});
+}
+
+function toggleLasso() {
+    if (lasso.isActive) 
+	lasso.deactivate();
+    else
+	lasso.activate();
+}
+
+function toggleRect() {
+    if (rectSelect.isActive) 
+	rectSelect.stop();
+    else
+	rectSelect.start();
+}
+
+function searchById() {
+
+    var bar = document.getElementById("search-bar");
+    locate_plugin.nodes(bar.value);
+    bar.value = "";
+    
+    sig.refresh({skipIndexation: true});
+    
+}
+
+function printNodeData(nodeId) {
+    tooltips.close();
+    /* DON'T REMOVE THIS */ console.log(sig.graph.nodes(nodeId));
+}
+
+function appendOptimizations(opt) {
+    if (~window.location.href.indexOf("?a=")) {
+	var path = window.location.href.substring(window.location.href.indexOf("?a="));
+	window.history.pushState({}, 'Title', path + opt);
+    }
+}
+
+function toggleEditorMode() {
+    tooltips.close();
+
+    /* Start Editor mode */
+    if (!editor_mode) {
+	editor_mode = true;
+	// Set background of the graph container
+	graph_container.style.backgroundColor = "#ffd";
+	// Show Editor Tab and hide Simulation Tools
+	$('#editor-tab').show();
+	$('#editor-tab').addClass('active');
+	$('#editor-tools').show();
+	
+	$('#graph-settings').hide();
+	$('#graph-tab').removeClass('active');
+	$('#sim-tab').hide();
+	$('#sim-tools').hide();
+	$('#sim-tab').removeClass('active');
+
+	// Appropriately display nodes and edges without autoscaling
+	var cam = sig.cameras[0];
+	var camSettings = {x: cam.x, y: cam.y, ratio: cam.ratio, angle: cam.angle};
+	sig.graph.nodes().forEach(function(n) {
+	    n.size = nodeSize * cam.ratio;
+	});
+	sig.graph.edges().forEach(function(e) {
+	    e.size = edgeSize / cam.ratio;
+	});
+	
+	// Switch to Canvas renderer
+	sig.killRenderer(sig.renderers[0]);
+	sig.killCamera(sig.cameras[0]);
+	sig.addRenderer({
+	    container: document.getElementById('graph-container'),
+	    type: 'canvas'
+	});
+	sig.cameras[0].goTo(camSettings);
+	// Turn off autoRescale because it's annoying when moving nodes
+	sig.settings('autoRescale', false);
+
+	// Instantiate plug-ins
+	var renderer = sig.renderers[0];
+	activeState = sigma.plugins.activeState(sig);
+	dragListener = sigma.plugins.dragNodes(sig, renderer, activeState);
+	select = sigma.plugins.select(sig, activeState, renderer);
+	keyboard = sigma.plugins.keyboard(sig, renderer);
+	select.bindKeyboard(keyboard);
+	lasso = new sigma.plugins.lasso(sig, renderer, {
+	    strokeStyle: 'red',
+	    fillWhileDrawing: true
+	});
+	select.bindLasso(lasso);
+	rectSelect = new sigma.plugins.rectSelect(sig, renderer);
+	select.bindRect(rectSelect);
+
+	dragListener.bind('startdrag', function(event) {
+	    console.log(event);
+	});
+	dragListener.bind('drag', function(event) {
+	    console.log(event);
+	});
+	dragListener.bind('drop', function(event) {
+	    console.log(event);
+	});
+	dragListener.bind('dragend', function(event) {
+	    console.log(event);
+	});
+
+	sig.refresh();
+
+    }
+    /* End Editor Mode */
+    else {
+	editor_mode = false;
+	// Revert background color
+	graph_container.style.backgroundColor = "#fff";
+
+	// Toggle tabs
+	$('#editor-tab').hide();
+	$('#editor-tab').removeClass('active');
+	$('#editor-tools').hide();
+	
+	$('#graph-settings').show();
+	$('#graph-tab').addClass('active');
+	$('#sim-tab').show();
+
+	// Kill editor plugins
+	sigma.plugins.killDragNodes(sig);
+	sigma.plugins.killActiveState();
+	sigma.plugins.killSelect(sig);
+
+	// Switch to WebGL renderer
+	sig.killRenderer(sig.renderers[0]);
+	sig.killCamera(sig.cameras[0]);
+	sig.addRenderer({
+	    container: document.getElementById('graph-container')
+	});
+
+	// Turn autoRescale back on
+	sig.settings('autoRescale', true);
+
+
+
+	sig.refresh();
+
+    }
+    
 }

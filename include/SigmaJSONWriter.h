@@ -163,7 +163,10 @@ class SigmaJSONWriter {
 
     // Set color and label based on element type
     std::string color = "";
-    std::string label = "";
+    //std::string label = "";
+    std::string data_string;
+    std::string err;
+    json11::Json data;
     switch (parent->getType()) {
     case ElementType::STE_T:
       if (parent->isReporting())
@@ -173,32 +176,39 @@ class SigmaJSONWriter {
       else
 	color = "rgb(158,185,212)";
       //color= "#9eb9d4";
-      
-      label = "id: " + parent->getId() + "\nss: " + static_cast<STE *>(parent)->getSymbolSet();
-      if (parent->isReporting())
-	label += "\nreport code: " + parent->getReportCode();
-      if (static_cast<STE *>(parent)->isStart())
-	label += "\nstart: " + static_cast<STE *>(parent)->getStringStart();
+      data_string = "{\"ss\": \"" + static_cast<STE *>(parent)->getSymbolSet() + "\"";
+
+      //label = "id: " + parent->getId() + "\nss: \"" + static_cast<STE *>(parent)->getSymbolSet() + "\"";
+      if (parent->isReporting()) {
+	//label += "\nreport code: " + parent->getReportCode();
+	data_string += ", \"rep_code\": \"Report Code: " + parent->getReportCode() + "\"";
+      }
+      if (static_cast<STE *>(parent)->isStart()) {
+	//label += "\nstart: " + static_cast<STE *>(parent)->getStringStart();
+	data_string += ", \"start\": \"Start Type: " + static_cast<STE *>(parent)->getStringStart() + "\"";
+      }
+      data_string += "}";
+      data = json11::Json::parse(data_string, err);
       break;
     case ElementType::OR_T:
       color = "rgb(255,0,255)";
-      label = "OR";
+      //label = "OR";
       break;
     case ElementType::AND_T:
       color = "rgb(255,0,255)";
-      label = "AND";
+      //label = "AND";
       break;
     case ElementType::COUNTER_T:
       color = "rgb(255,0,255)";
-      label = "COUNTER";
+      //label = "COUNTER";
       break;
     case ElementType::INVERTER_T:
       color = "rgb(255,0,255)";
-      label = "INVERTER";
+      //label = "INVERTER";
       break;
     case ElementType::NOR_T:
       color = "rgb(255,0,255)";
-      label = "NOR";
+      //label = "NOR";
       break;
     }
       
@@ -209,7 +219,8 @@ class SigmaJSONWriter {
       // Add this node with all current info
       n.push_back(json11::Json::object{
 	  {"id", parent->getId() },
-	    {"label", label },
+	    //	    {"label", label },
+	      {"data", data },
 	      {"color", color },
 		{"x", std::to_string(xPos) },
 		  {"y", std::to_string(y) }
@@ -274,7 +285,8 @@ class SigmaJSONWriter {
       
       n.push_back(json11::Json::object{
 	  {"id", parent->getId() },
-	    {"label", label },
+	    //	    {"label", label },
+	      {"data", data },
 	      {"color", color },
 		{"x", std::to_string((low + high + 1)/2) },
 		  {"y", std::to_string(y) }
