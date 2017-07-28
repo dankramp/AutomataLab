@@ -51,7 +51,10 @@
       mousemoveCount = 0,
       kbd = null,
       lasso = null,
-      rectSelect = null;
+      rectSelect = null,
+      addEdge = false,
+      sourceId = null,
+      edgeSize = 0;
 
     _body = _body || document.getElementsByTagName('body')[0];
 
@@ -69,6 +72,15 @@
       }
     };
 
+      /**
+       * Piggy-backing off this code to add edge between nodes
+       */
+      this.addEdge = function(sid, es) {
+	  addEdge = true;
+	  sourceId = sid;
+	  edgeSize = es;
+      };
+
     /**
      * This fuction handles the node click event. The clicked node is activated.
      * All active nodes are deactivated if one of the active nodes is clicked.
@@ -84,6 +96,21 @@
       if (mousemoveCount > 1) return;
 
       var target = event.data.node[0].id;
+	if (addEdge) {
+	    var edge = {
+		id: "e" + s.graph.edges().length,
+		source: sourceId,
+		target: target,
+		size: edgeSize
+	    };
+	    s.graph.addEdge(edge);
+	    addEdge = false;
+	    Wt.emit(Wt, 'addEdge', sourceId, target);
+	    sourceId = null;
+	    s.refresh({skipIndexation: true});
+
+	    return;
+	}
       var actives = a.nodes().map(function(n) {
         return n.id;
       });
@@ -228,6 +255,7 @@
     }
 
     // Drop selected nodes and edges
+      /*
     function spaceDel() {
       var nodes = a.nodes().map(function(n) { return n.id; }),
         edges = a.edges().map(function(e) { return e.id; });
@@ -244,7 +272,7 @@
       }
 
       s.refresh();
-    }
+    }*/
 
     // Select neighbors of selected nodes
     function spaceE() {
@@ -272,7 +300,7 @@
 
     s.bind('clickNodes', this.clickNodesHandler);
     s.bind('doubleClickNodes', this.doubleClickNodesHandler);
-    s.bind('clickEdges', this.clickEdgesHandler);
+    s.bind('rightClickEdges', this.clickEdgesHandler);
     s.bind('clickStage', this.clickStageHandler);
 
     _body.addEventListener('keydown', keyDown, false);
@@ -287,7 +315,7 @@
       kbd = keyboard;
       kbd.bind('32+65 18+32+65', spaceA);
       kbd.bind('32+85 18+32+85', spaceU);
-      kbd.bind('32+46 18+32+46', spaceDel);
+      //kbd.bind('32+46 18+32+46', spaceDel);
       kbd.bind('32+69 18+32+69', spaceE);
       kbd.bind('32+73 18+32+73', spaceI);
       kbd.bind('32+76 18+32+76', spaceL);
@@ -301,7 +329,7 @@
       if (kbd) {
         kbd.unbind('32+65 18+32+65', spaceA);
         kbd.unbind('32+85 18+32+85', spaceU);
-        kbd.unbind('32+46 18+32+46', spaceDel);
+        //kbd.unbind('32+46 18+32+46', spaceDel);
         kbd.unbind('32+69 18+32+69', spaceE);
         kbd.unbind('32+73 18+32+73', spaceI);
         kbd.unbind('32+76 18+32+76', spaceL);

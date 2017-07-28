@@ -62,11 +62,10 @@
       _isMouseOverCanvas = false,
       _drag = false,
       _sticky = true,
-      _enabled = true;
+      _enabled = true,
+      _addNode = false,
+      _addEdge = false;
 
-    if (renderer instanceof sigma.renderers.svg) {
-        _mouse = renderer.container.firstChild;
-    }
 
     renderer.bind('hovers', nodeMouseOver);
     renderer.bind('hovers', treatOutNode);
@@ -90,7 +89,9 @@
       _isMouseDown = false,
       _isMouseOverCanvas = false,
       _drag = false,
-      _sticky = true;
+	_sticky = true;
+	_addNode = false;
+	_addEdge = false;
     }
 
     /**
@@ -109,6 +110,41 @@
 	_body.removeEventListener('touchleave', nodeMouseUp);
 	_body.removeEventListener('touchend', nodeMouseUp);
     }
+
+      /**
+       * Trigger add node mode
+       */
+      this.addNode = function(node) {
+	  _body.addEventListener('mousemove', nodeMouseMove);
+	  _body.addEventListener('mousedown', nodeMouseDown);
+	  _s.graph.addNode(node);
+	  _node = _s.graph.nodes(node.id);
+	  _hoveredNode = _node;
+	  _addNode = true;
+	  $('#graph-container').css( 'cursor', 'pointer' );
+      }
+
+      this.addEdge = function(sourceId, edgeSize) {
+	  _body.addEventListener('mousemove', nodeMouseMove);
+	  _body.addEventListener('mousedown', nodeMouseDown);
+	  var node = {
+	      id: "_temp_add_edge_node_",
+	      x: 0,
+	      y: 0,
+	      size: 0
+	  };
+	  _s.graph.addNode(node);
+	  var edge = {
+	      id: "_temp_add_edge_edge_",
+	      source: sourceId,
+	      target: "_temp_add_edge_node_",
+	      size: edgeSize
+	  }
+	  _s.graph.addEdge(edge);
+	  _node = _s.graph.nodes(node.id);
+	  _hoveredNode = _node;
+	  _addEdge = true;
+      }
 
     // Calculates the global offset of the given element more accurately than
     // element.offsetTop and element.offsetLeft.
@@ -150,10 +186,17 @@
     };
 
     function nodeMouseOver(event) {
+	if (_addNode)
+	    return;
+
 	$('#graph-container').css( 'cursor', 'auto' );
+	if (_addEdge)
+	    return;
+	
       if (event.data.enter.nodes.length == 0) {
         return;
       }
+
       var n = event.data.enter.nodes[0];
 
       // Don't treat the node if it is already registered
@@ -174,10 +217,18 @@
     };
 
     function treatOutNode(event) {	
+	if (_addNode)
+	    return;
+	// If we have not left a node
       if (event.data.leave.nodes.length == 0) {
 	  $('#graph-container').css( 'cursor', 'move' );
+	  if (_addEdge) 
+	      $('#graph-container').css( 'cursor', 'pointer' );
         return;
       }
+	if (_addEdge) {
+	    return;
+	}
       var n = event.data.leave.nodes[0];
 
       if (_hoveredNode && _hoveredNode.id === n.id) {
@@ -195,6 +246,12 @@
       if(!_enabled || event.which == 3) return; // Right mouse button pressed
 
       _isMouseDown = true;
+	_addNode = false;
+	if (_addEdge) {
+	    _addEdge = false;
+	    // Remove temporary node and edge from graph
+	    _s.graph.dropNode("_temp_add_edge_node_");
+	}
       if (_node && _s.graph.nodes().length > 0) {
         //_sticky = true;
         _mouse.removeEventListener('mousedown', nodeMouseDown);
@@ -316,7 +373,7 @@
             ref.push(aux);
           }
           if(i == nodes.length - 1) { //we tried all nodes
-            break
+            break;
           }
           if (i > 0) {
             if (ref[0].x == ref[1].x || ref[0].y == ref[1].y) {

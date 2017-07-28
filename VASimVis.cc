@@ -6,9 +6,12 @@
 #include <Wt/WComboBox>
 #include <Wt/WContainerWidget>
 #include <Wt/WCheckBox>
+#include <Wt/WDialog>
 #include <Wt/WEnvironment>
 #include <Wt/WFileUpload>
 #include <Wt/WIntValidator>
+#include <Wt/WJavaScript>
+#include <Wt/WLabel>
 #include <Wt/WLineEdit>
 #include <Wt/WLink>
 #include <Wt/WPushButton>
@@ -40,6 +43,11 @@ public:
   void beginSimulation();
   void addToJSCache(int numGraphs);
   void loadDemoGraph(std::string name, bool user);
+  void addEdge(std::string sourceId, std::string targetId);
+  void changeSTEData(std::string id, std::string ss, std::string start, std::string rep);
+ 
+  Wt::JSignal<std::string, std::string> addEdge_;
+  Wt::JSignal<std::string, std::string, std::string, std::string> changeSTEData_;
 
 private:
   std::string fn;
@@ -54,12 +62,23 @@ private:
   Wt::WComboBox *anmlzoo_combo;
   Wt::WText *error_modal_message;
 
+  Wt::WText *ste_options_title;
+  Wt::WLineEdit *ste_id_input;
+  Wt::WLineEdit *ste_ss_input;
+  Wt::WLabel *ste_rep_label;
+  Wt::WCheckBox *reporting_check;
+  Wt::WLineEdit *ste_rep_input;
+  Wt::WComboBox *ste_start_select;
+  Wt::WPushButton *ste_options_create_btn;
+  std::string ste_id;
+
   Automata ap;
   json11::Json cache = json11::Json::array{};
 
   bool automataUploaded = false;
   bool validAutomata = false;
   bool validInput = false;
+  bool editingSTE = false;
   int cache_index = -1;
   // How many new items to add to cache
   int cache_fetch_size = 100;
@@ -67,15 +86,27 @@ private:
 };
 
 VASimViz::VASimViz(const Wt::WEnvironment& env)
-  : Wt::WApplication(env)
+  : Wt::WApplication(env),
+    addEdge_(this, "addEdge"),
+    changeSTEData_(this, "changeSTEData")
 {
 
+  addEdge_.connect(this, &VASimViz::addEdge);
+  changeSTEData_.connect(this, &VASimViz::changeSTEData);
+
+  // Set page title
   setTitle("ANML Viewer");
-  // Style sheets
+
+  /* STYLE SHEETS */
+
   Wt::WApplication::instance()->useStyleSheet("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css");
   Wt::WApplication::instance()->useStyleSheet("styles.css");
   
-  // Imports
+  /* IMPORTS */
+  // Some are from sigma.js, some from linkurious.js, because linkurious plugins
+  // require some core to be from itself, but some parts of sigma core are faster
+  
+  // Core
   Wt::WApplication::instance()->require("/sigma.js/src/sigma.core.js");
   Wt::WApplication::instance()->require("/sigma.js/src/conrad.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/utils/sigma.utils.js");
@@ -89,16 +120,18 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.mouse.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.touch.js");
 
+  // Renderers
   Wt::WApplication::instance()->require("/linkurious.js/src/renderers/sigma.renderers.canvas.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.webgl.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.svg.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.def.js");
 
+  // WebGL 
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js");
-  
+
+  // Canvas
   Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.labels.def.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.hovers.def.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.nodes.def.js");
@@ -107,6 +140,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.extremities.def.js");
 
+  // Middlewares and misc
   Wt::WApplication::instance()->require("/linkurious.js/src/middlewares/sigma.middlewares.rescale.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/middlewares/sigma.middlewares.copy.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.animation.js");
@@ -114,8 +148,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.bindDOMEvents.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.drawHovers.js");
 
-  /* END SIGMA IMPORTS */
-
+  // Linkurious plugins
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.dragNodes/sigma.plugins.dragNodes.js");
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.helpers.graph/sigma.helpers.graph.js");
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.activeState/sigma.plugins.activeState.js");
@@ -124,26 +157,23 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.lasso/sigma.plugins.lasso.js");
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.rectSelect/sigma.plugins.rectSelect.js");
 
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/settings.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.labels.def.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.hovers.def.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.def.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.cross.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.diamond.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.equilateral.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.square.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.star.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.def.js");
-  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.arrow.js");
-
-  // Plugins
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.locate/sigma.plugins.locate.js");
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.tooltips/sigma.plugins.tooltips.js");
   Wt::WApplication::instance()->require("https://cdnjs.cloudflare.com/ajax/libs/mustache.js/0.8.1/mustache.min.js");  
 
-  // Extra scripts and whatnot
+  // Linkurious renderer
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/settings.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.labels.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.hovers.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.arrow.js");
+
+  // JQuery
   Wt::WApplication::instance()->requireJQuery("https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js");
+  // Bootstrap
   Wt::WApplication::instance()->require("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js");
+  // Custom page scripts
   Wt::WApplication::instance()->require("js/page_script.js");
   Wt::WApplication::instance()->require("js/sigma_script.js"); 
 
@@ -364,14 +394,6 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
       }));
   Wt::WText *search_button = new Wt::WText("<button class='btn btn-secondary' id='search-btn' onClick='searchById()' data-dismiss='modal' type='button'>Search</button>", Wt::XHTMLUnsafeText, search_modal_input_group);
   search_button->setStyleClass("input-group-btn");
-  /*
-  Wt::WText *search_btn_holder = new Wt::WText(search_modal_input_group);
-  search_button->setStyleClass("input-group-btn");
-  Wt::WPushButton *search_button = new WPushButton("Search", search_btn_holder);
-  search_button->setStyleClass("btn btn-secondary");
-  search_button->setAttributeValue("data-dismiss", "modal");
-  search_button->setAttributeValue("onClick", "searchById(" + search_bar->text()->toUTF8() + ")");
-  */
 
   /* Loading modal */
 
@@ -471,12 +493,179 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	  remove_or_check->setCheckState(Wt::CheckState::Unchecked);
 	}
       }));
-    
-   
+
+  /* Add STE Dialog */
+
+  Wt::WContainerWidget *ste_options_modal = new Wt::WContainerWidget(root());
+  ste_options_modal->setId("add-ste-modal");
+  ste_options_modal->setStyleClass("modal fade");
+  ste_options_modal->setAttributeValue("tabindex", "-1");
+  ste_options_modal->setAttributeValue("role", "dialog");
+  ste_options_modal->setAttributeValue("aria-hidden", "true");
+  ste_options_modal->setAttributeValue("data-backdrop", "static");
+  Wt::WContainerWidget *ste_options_modal_dialog = new Wt::WContainerWidget(ste_options_modal);
+  ste_options_modal_dialog->setStyleClass("modal-dialog");
+  ste_options_modal_dialog->setAttributeValue("role", "document");
+  Wt::WContainerWidget *ste_options_modal_content = new Wt::WContainerWidget(ste_options_modal_dialog);
+  ste_options_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *ste_options_modal_header = new Wt::WContainerWidget(ste_options_modal_content);
+  ste_options_modal_header->setStyleClass("modal-header");
+  ste_options_title = new Wt::WText("<h3 class='modal-title'>Create STE</h3>", ste_options_modal_header);
+  Wt::WContainerWidget *ste_options_modal_body = new Wt::WContainerWidget(ste_options_modal_content);
+  ste_options_modal_body->setStyleClass("modal-body");
+
+  Wt::WTable *ste_options_modal_table = new Wt::WTable(ste_options_modal_body);
+  ste_options_modal_table->setStyleClass("ste-options-table");
+
+  Wt::WContainerWidget *ste_options_fg1 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(0,0));
+  ste_options_fg1->addStyleClass("form-group");
+  Wt::WLabel *ste_id_label = new Wt::WLabel("ID: ", ste_options_fg1);
+  ste_id_label->setStyleClass("control-label");
+  ste_id_label->setAttributeValue("for", "ste-id-input");
+  ste_id_input = new Wt::WLineEdit(ste_options_fg1);
+  ste_id_input->setStyleClass("form-control");
+  ste_id_input->setId("ste-id-input");
+
+  Wt::WContainerWidget *ste_options_fg2 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(0,1));
+  ste_options_fg2->addStyleClass("form-group");
+  Wt::WLabel *ste_ss_label = new Wt::WLabel("Symbol Set: ", ste_options_fg2);
+  ste_ss_label->setStyleClass("control-label");
+  ste_ss_label->setAttributeValue("for", "ste-ss-input");
+  ste_ss_input = new Wt::WLineEdit(ste_options_fg2);
+  ste_ss_input->setStyleClass("form-control");
+  ste_ss_input->setId("ste-ss-input");
+
+  Wt::WContainerWidget *ste_options_fg3 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(1,0));
+  ste_options_fg3->addStyleClass("form-group");
+  Wt::WLabel *ste_start_label = new Wt::WLabel("Start Type:", ste_options_fg3);
+  ste_start_label->setStyleClass("control-label");
+  ste_start_label->setAttributeValue("for", "ste-start-select");
+  ste_start_select = new Wt::WComboBox(ste_options_fg3);
+  ste_start_select->setStyleClass("form-control");
+  ste_start_select->setId("ste-start-select");
+  ste_start_select->addItem("none");
+  ste_start_select->addItem("all-input");
+  ste_start_select->addItem("start-of-data");
+
+  Wt::WContainerWidget *ste_options_fg4 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(1,1));
+  ste_options_fg4->addStyleClass("form-group");
+  reporting_check = new Wt::WCheckBox(" Reporting?", ste_options_fg4);
+  Wt::WBreak *ste_line_break = new Wt::WBreak(ste_options_fg4);
+  ste_rep_label = new Wt::WLabel("Report Code: ", ste_options_fg4);
+  ste_start_label->setStyleClass("control-label");
+  ste_start_label->setAttributeValue("for", "ste-rep-input");
+  ste_rep_input = new Wt::WLineEdit(ste_options_fg4);
+  ste_rep_input->setStyleClass("form-control");
+  ste_rep_input->setId("ste-rep-input");
+
+  ste_rep_label->hide();
+  ste_rep_input->hide();
+  reporting_check->clicked().connect(std::bind( [=] () {
+	if (reporting_check->isChecked()) {
+	  ste_rep_label->show();
+	  ste_rep_input->show();
+	}
+	else {
+	  ste_rep_label->hide();
+	  ste_rep_input->hide();
+	}
+      }));
+  Wt::WText *ste_error_msg = new Wt::WText(ste_options_modal_body);
+  ste_error_msg->setInline(false);
+  ste_error_msg->setStyleClass("alert alert-danger");
+  ste_error_msg->hide();
+
+  Wt::WContainerWidget *ste_options_modal_footer = new Wt::WContainerWidget(ste_options_modal_content);
+  ste_options_modal_footer->setStyleClass("modal-footer");
+  Wt::WPushButton *ste_options_close_btn = new Wt::WPushButton("Cancel", ste_options_modal_footer);
+  ste_options_close_btn->setStyleClass("btn btn-default");
+  ste_options_close_btn->setAttributeValue("data-dismiss", "modal");
+  ste_options_close_btn->clicked().connect(std::bind( [=] () {
+	// Reset modal
+	ste_id_input->setText("");
+	ste_ss_input->setText("");
+	ste_rep_input->setText("");
+	ste_rep_input->hide();
+	ste_rep_label->hide();
+	ste_start_select->setCurrentIndex(0);
+	reporting_check->setCheckState(Wt::CheckState::Unchecked);	 
+	ste_error_msg->hide();
+      }));
+  Wt::WValidator *validator = new Wt::WValidator(true);
+  ste_id_input->setValidator(validator);
+  ste_ss_input->setValidator(validator);
+  ste_options_create_btn = new Wt::WPushButton("Create STE", ste_options_modal_footer);
+  ste_options_create_btn->setStyleClass("btn btn-primary"); 
+  ste_options_create_btn->setId("create-ste-btn");
+  ste_options_create_btn->clicked().connect(std::bind( [=] () {
+	// Input validation - Id and Symbol Set are mandatory
+	if (ste_id_input->validate() == Wt::WValidator::Valid 
+	    && ste_ss_input->validate() == Wt::WValidator::Valid) {
+	  auto elements = ap.getElements();
+	  // Does element with this ID already exist?
+	  if (ste_id_input->text().toUTF8() != ste_id && elements.find(ste_id_input->text().toUTF8()) != elements.end()) { // yes
+	    ste_error_msg->setText("ERROR: An STE with this ID already exists.");
+	    ste_error_msg->show();
+	  } 
+	  else { // Unique ID, good to go!
+	    std::string id = ste_id_input->text().narrow();
+	    std::string ss = ste_ss_input->text().narrow();
+	    std::string rep = (reporting_check->isChecked()) ? ("Report Code: " + ste_rep_input->text().narrow()) : "";
+	    std::string start = (ste_start_select->currentIndex() > 0) ? ("Start Type: " +  ste_start_select->currentText().narrow()) : "";
+	    std::string color = "rgb(158,185,212)";
+
+	    STE *newSTE = new STE(id, ss, ste_start_select->currentText().toUTF8());
+
+	    // If reporting
+	    if (rep.length() > 0) {
+	      color = "rgb(255,150,0)";
+	      newSTE->setReporting(true);
+	      newSTE->setReportCode(ste_rep_input->text().toUTF8());
+	    }
+	    // If start
+	    else if (start.length() > 0)
+	      color = "rgb(100,100,100)";
+
+	    if (editingSTE) {
+	      STE * element = static_cast <STE *>(ap.getElements()[ste_id]);
+	      element->setId(id);
+	      element->setReporting(rep.length() > 0);
+	      element->setReportCode(ste_rep_input->text().toUTF8());
+	      element->setSymbolSet(ss);
+	      element->setStart(ste_start_select->currentText().narrow());
+	      doJavaScript("updateSTEData('" + id + "','" + ss + "','" + start + "','" + rep + "','" + color + "')");
+	      ste_options_title->setText("Create STE");
+	      ste_options_create_btn->setText("Create STE"); 
+	      editingSTE = false;
+	    }
+	    else {// Add the STE to the automata and the node to the graph
+	      ap.rawAddSTE(newSTE);
+	      std::cout << "addSTE('" << id << "','" << ss << "','" << rep << "','" << start << "','" << color << "')" << std::endl;
+	      doJavaScript("addSTE('" + id + "','" + ss + "','" + rep + "','" + start + "','" + color + "')");
+	    }
+
+	    // Reset modal
+	    ste_id_input->setText("");
+	    ste_ss_input->setText("");
+	    ste_rep_input->setText("");
+	    ste_rep_input->hide();
+	    ste_rep_label->hide();
+	    ste_start_select->setCurrentIndex(0);
+	    reporting_check->setCheckState(Wt::CheckState::Unchecked);	 
+	    ste_error_msg->hide();
+	  }
+	}
+	else {
+	    ste_error_msg->setText("ERROR: ID and Symbol Set are required fields.");
+	    ste_error_msg->show();
+	}
+      }));
+
 
   // ************** //
   // *** FOOTER *** //
   // ************** //
+
 
   Wt::WContainerWidget *footer = new Wt::WContainerWidget(root());
   footer->setStyleClass("footer");
@@ -647,12 +836,6 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   container->setId("container");
   Wt::WContainerWidget *graph_container = new Wt::WContainerWidget(container);
   graph_container->setId("graph-container");
-  /*  std::string menu_string = std::string("<ul class='custom-menu'>") + 
-    "<li data-action='first'>Search by ID</li>" +
-    "<li data-action='second'>Toggle Editor Mode</li>" +
-    "<li data-action='third'>Reset Camera</li>" +
-    "</ul>";
-    Wt:WText *contextmenu = new Wt::WText(menu_string, Wt::XHTMLUnsafeText, root());*/
   
 
   // *************************** //
@@ -751,6 +934,36 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
     }
   }
 
+}
+
+void VASimViz::addEdge(std::string sourceId, std::string targetId) {
+  auto elements = ap.getElements();
+  ap.addEdge(elements[sourceId], elements[targetId]);
+}
+
+void VASimViz::changeSTEData(std::string id, std::string ss, std::string start, std::string rep) {
+  ste_id_input->setText(id);
+  ste_ss_input->setText(ss);
+  ste_start_select->setCurrentIndex(ste_start_select->findText(start));
+  ste_rep_input->setText(rep);
+  ste_id = id;
+
+  ste_options_title->setText("<h3 class='modal-title'>Update STE Data</h3>");
+  if (rep.length() > 0) {
+    reporting_check->setChecked(true);
+    ste_rep_input->show();
+    ste_rep_label->show();
+  }
+  else {
+    reporting_check->setChecked(false);
+    ste_rep_input->hide();
+    ste_rep_label->hide();
+  }
+  ste_options_create_btn->setText("Update STE");
+
+  editingSTE = true;
+
+  doJavaScript("$('#add-ste-modal').modal('show')");
 }
 
 /*

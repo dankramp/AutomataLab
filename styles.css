@@ -140,6 +140,12 @@ kbd {
 .slider {
     width: 150px;
 }
+.ste-options-table {
+    width: 100%;
+}
+.ste-options-table td {
+    padding: 2px 6px;
+}
 td {
     vertical-align: middle;
 }
