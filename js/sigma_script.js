@@ -101,6 +101,9 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 // Simple function to convert a string to a number
 function toInt(n){ return Math.round(Number(n)); };
 
+// Default page settings
+var page_settings = new Settings();
+
 // Sigma variables
 var sig = new sigma();
 var changedGraph = new sigma.classes.graph();
@@ -114,16 +117,24 @@ var keyboard;
 var lasso;
 var rectSelect;
 var editNodeId;
+var sig_settings;
+var tooltip_def_config;
+var tooltip_edit_config;
+var bounds;
 
 // Graph settings variable defaults
 var heatMode = false;
 var draw_edges = true;
 var nodeSize = 1;
-var arrowSize = 5;
 var edgeSize = .1;
 var graphWidth = 12;
 var graphHeight = 10;
 var editor_mode = false;
+var nodeScalar = 1;
+var edgeScalar = 1;
+var deleteEdgeMode = false;
+var del_index = 0;
+var del_id = "";
 
 // Simulation variables
 var simIndex = 0;
@@ -147,11 +158,125 @@ var $hidden_play_btn;
 var $input_display_container;
 var $table;
 
+var body;
 var graph_container;
 
 
 // Called on page load
 function pageLoad() {
+    // Loading the default settings for a sigma instance
+    sig_settings = {
+	skipIndexation: true,
+	hideEdgesOnMove: true,
+	zoomMin: .00001,
+	zoomMax: 2,
+	edgeColor: "default",
+	drawEdges: draw_edges,
+	edgeHoverColor: "default",
+	defaultEdgeHoverColor: "#f00",
+	edgeHoverSizeRatio: 1.3,
+	edgeHoverExtremities: true,
+	defaultEdgeColor: "#888",
+	defaultEdgeType: "arrow",
+	defaultNodeType: "fast",
+	maxNodeSize: nodeSize,
+	minNodeSize: 0,
+	maxEdgeSize: edgeSize,
+	minEdgeSize: 0,	
+	nodesPowRatio: 1,
+	edgesPowRatio: 1,
+	sideMargin: 5,
+	borderSize: 2,
+	nodeQuadTreeMaxLevel: 8,
+	edgeQuadTreeMaxLevel: 8,
+	// Plugin stuff	
+	mouseEnabled: true,
+	touchEnabled: true,
+	defaultNodeActiveBorderColor: '#ff7',
+	nodeBorderSize: 0,
+	nodeActiveBorderSize: 2
+    };
+
+    // The default configuration for the tooltip plugin when not in Editor Mode
+    tooltip_def_config = {
+	node: [ 
+	    {
+		show: 'rightClickNode',
+		cssClass: 'sigma-tooltip',
+		position: 'right',
+		template:
+		'<ul class="custom-menu">' +
+		    '<div class="hover-info"><p>ID: {{id}}</p>' +
+		    '<p>Symbol Set: {{data.ss}}</p>' +
+		    '<p>{{data.start}}</p>' +
+		    '<p>{{data.rep_code}}</p></div>' +
+		    '<li onClick="toggleChildren(\'{{id}}\')">Show/Hide Children</li>' +
+		    '<li onClick="soloChildren(\'{{id}}\')">Solo Children</li>' +
+		    '<li onClick="printNodeData(\'{{id}}\')">- Print Node Data -</li>' +
+		    '</ul>',
+		renderer: function(node, template) {
+		    return Mustache.render(template, node);
+		}
+	    }
+	],
+	stage: {
+	    template:
+	    '<ul class="custom-menu">' +
+		'<li onClick="openSearchBar()">Search By ID</li>' +
+		'<li onClick="showAllNodes()">Show All Nodes</li>' +
+		'<li onClick="toggleEditorMode()">Toggle Editor Mode</li>' +
+		'<li onClick="resetCamera()">Reset Camera</li>' +
+		'</ul>'
+	}
+    };
+
+    // The default configuration for the tooltip plugin when in Editor Mode
+    tooltip_edit_config = {
+	node: [ 
+	    {
+		show: 'rightClickNode',
+		cssClass: 'sigma-tooltip',
+		position: 'right',
+		template:
+		'<ul class="custom-menu">' +
+		    '<div class="hover-info"><p>ID: {{id}}</p>' +
+		    '<p>Symbol Set: {{data.ss}}</p>' +
+		    '<p>{{data.start}}</p>' +
+		    '<p>{{data.rep_code}}</p></div>' +
+		    '<li onClick="addEdge(\'{{id}}\')">Add Outgoing Connection</li>' +
+		    '<li onClick="triggerChangeData(\'{{id}}\')">Change Data</li>' +
+		    '<li onClick="triggerDeleteSTE(\'{{id}}\')">Delete STE</li>' +
+		    '<li onClick="printNodeData(\'{{id}}\')">- Print Node Data -</li>' +
+		    '</ul>',
+		renderer: function(node, template) {
+		    return Mustache.render(template, node);
+		}
+	    }
+	],
+	edge: {
+	    show: 'rightClickEdge',
+	    template: 
+	    '<ul class="custom-menu">' +
+		'<li onClick="selectConnectedNodes(\'{{id}}\')">Select Connected STEs</li>' +
+		'<li onClick="removeEdge(\'{{id}}\')">Remove Edge</li>' +
+		'</ul>',
+	    renderer: function(edge, template) {
+		return Mustache.render(template, edge);
+	    }
+	},
+	stage: {
+	    template:
+	    '<ul class="custom-menu">' +
+		'<li onClick="triggerAddSTE()">Add STE</li>' +		 
+		'<li onClick="showAllNodes()">Show All Nodes</li>' +
+		'<li onClick="toggleEditorMode()">Toggle Editor Mode</li>' +
+		'<li onClick="resetCamera()">Reset Camera</li>' +
+		'<li onClick="printAllNodeData()">- Print All Node Data -</li>' +
+		'</ul>'
+	}
+    };
+
+
 
     // Initialize DOM element references
     $download_rep_btn = $('#dl-rep-btn');
@@ -161,6 +286,8 @@ function pageLoad() {
     $hidden_play_btn = $('#hidden-play-btn');
     $input_display_container = $('#input-display-container');
     $table = $("#input-table");
+    
+    body = document.body;
 
     // Set graph container height to fit between header and footer
     graph_container = document.getElementById("graph-container");
@@ -248,8 +375,7 @@ function pageLoad() {
 		$sim_rev_btn.prop("disabled", true);		
 	}, function(reject) {
 	    console.log(reject);
-	});
-	
+	});	
     });
     $hidden_play_btn.click(function(){
 	stepFromCache(1).then(function(resolve) {
@@ -263,7 +389,6 @@ function pageLoad() {
 	    $sim_rev_btn.prop("disabled", false);
 	    $play_sim_btn.html("Play Simulation");
 	});
-
     });
     var interval = null;
     $play_sim_btn.click(function() {
@@ -293,77 +418,12 @@ function pageLoad() {
 	    // Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
 	    // type: 'webgl'
 	},
-	settings: {
-	    skipIndexation: true,
-	    labelThreshold: 100,
-	    hideEdgesOnMove: true,
-	    zoomMin: .00001,
-	    zoomMax: 2,
-	    edgeColor: "default",
-	    drawEdges: draw_edges,
-	    drawEdgeLabels: false,
-	    edgeHoverColor: "default",
-	    edgeHoverSizeRatio: 2,
-	    edgeHoverExtremities: true,
-	    defaultEdgeColor: "#888",
-	    defaultEdgeType: "arrow",
-	    defaultNodeType: "fast",
-	    maxNodeSize: nodeSize,
-	    minNodeSize: 0,
-	    minEdgeSize: 0,
-	    maxEdgeSize: edgeSize,
-	    nodesPowRatio: 1,
-	    edgesPowRatio: 1,
-	    sideMargin: 5,
-	    borderSize: 2,
-	    nodeQuadTreeMaxLevel: 8,
-	    edgeQuadTreeMaxLevel: 8,
-	    // Plugin stuff
-	    enableEdgeHovering: false,
-	    edgeHoverHighlightNodes: 'circle',
-	    mouseEnabled: true,
-	    touchEnabled: true,
-	    defaultNodeActiveBorderColor: '#ff7',
-	    nodeBorderSize: 0,
-	    nodeActiveBorderSize: 2
-	}
+	settings: sig_settings
     });
 
     // Linkurious plugins
     locate_plugin = sigma.plugins.locate(sig);
-
-    var config = {
-	node: [ 
-	    {
-		show: 'rightClickNode',
-		cssClass: 'sigma-tooltip',
-		position: 'right',
-		template:
-		'<ul class="custom-menu">' +
-		    '<div class="hover-info"><p>ID: {{id}}</p>' +
-		    '<p>Symbol Set: {{data.ss}}</p>' +
-		    '<p>{{data.start}}</p>' +
-		    '<p>{{data.rep_code}}</p></div>' +
-		    '<li onClick="toggleChildren(\'{{id}}\')">Show/Hide Children</li>' +
-		    '<li onClick="soloChildren(\'{{id}}\')">Solo Children</li>' +
-		    '<li onClick="printNodeData(\'{{id}}\')">- Print Node Data -</li>' +
-		    '</ul>',
-		renderer: function(node, template) {
-		    return Mustache.render(template, node);
-		}
-	    }
-	],
-	stage: {
-	    template:
-	    '<ul class="custom-menu">' +
-		'<li onClick="openSearchBar()">Search By ID</li>' +
-		'<li onClick="showAllNodes()">Show All Nodes</li>' +
-		'<li onClick="toggleEditorMode()">Toggle Editor Mode</li>' +
-		'<li onClick="resetCamera()">Reset Camera</li>' +
-		'</ul>'
-	}
-    };
-    tooltips = sigma.plugins.tooltips(sig, sig.renderers[0], config);
+    tooltips = sigma.plugins.tooltips(sig, sig.renderers[0], tooltip_def_config);
 
     sig.bind('clickStage', function() {tooltips.close()});
 
@@ -392,18 +452,9 @@ function setInputLength(length) {
     input_length = length;
 }
 
-function makeTextFile() {
-    var data = new Blob([reportRecord], {type: 'text/plain'});
-
-    // If we are replacing a previously generated file we need to
-    // manually revoke the object URL to avoid memory leaks.
-    if (textFile !== null) {
-	window.URL.revokeObjectURL(textFile);
-    }
-
-    textFile = window.URL.createObjectURL(data);
-
-    return textFile;
+function exportFile(fn, data) {
+    var blob = new Blob([data], {type: "text/plain"});
+    saveAs(blob, fn);
 }
 
 function setCachedGraphs(index, json_object) {
@@ -411,7 +462,7 @@ function setCachedGraphs(index, json_object) {
     i,
     k;
     // Reset clickability of previous graphs
-    $('a.click-index').contents().unwrap();
+    $('.input-display-table a').contents().unwrap();
     
     cachedGraphs = json_object;
     cache_length = cachedGraphs[0].length;
@@ -457,7 +508,7 @@ function setCachedGraphs(index, json_object) {
 	}	
     }
     
-    $download_rep_btn.attr({href: makeTextFile()});
+    $download_rep_btn.attr({onClick: 'exportFile("reports.txt", reportRecord)'});
     
     // Enable forward sim buttons
     if (!playSim)
@@ -508,15 +559,17 @@ function loadGraph(json_object){
 
 	sig.graph.nodes().forEach(function(n) {
 	    n.size = 1;
+	    n.color = getColor(n.data.type);
 	    n.originalColor = n.color;
-	    n.x = n.x * Math.pow(1.1, graphWidth);
+	    n.x = n.x * Math.pow(1.1, graphWidth) + 1;
 	    n.y = ~~n.y;
 	    n.count = 0;
 	    if (heatMode)
 		n.color = "rgb(0,0,0)";
 	});
+	
 	sig.graph.edges().forEach(function(e) {
-	    e.size = 0.05;
+	    e.size = 1;
 	});
 
 	sig.refresh();
@@ -526,6 +579,30 @@ function loadGraph(json_object){
 	alert(err.message);
     }
     
+}
+
+function getColor(type) {
+    switch (type) {
+	// Inactive
+    case "node":
+	return page_settings.settings()["defaultSTEColor"];
+    case "start":
+	return page_settings.settings()["defaultStartSTEColor"];
+    case "report":
+	return page_settings.settings()["defaultReportSTEColor"];
+	// Activity
+    case "enabled":
+	return page_settings.settings()["enabledSTEColor"];
+    case "activated":
+	return page_settings.settings()["activatedSTEColor"];
+    case "reporting":
+	return page_settings.settings()["reportingSTEColor"];
+
+    default:
+	return page_settings.settings()["defaultSpecialSTEColor"];
+
+	
+    }
 }
 
 function stepFromCache(step_size) {
@@ -570,7 +647,7 @@ function updateGraph(updateJson) {
 	    sig.graph.nodes(n.id).color = n.originalColor;
 	});
 	changedGraph.edges().forEach(function (e) {
-	    sig.graph.edges(e.id).color = "";
+	    delete sig.graph.edges(e.id).color;
 	});
     }
     /*
@@ -598,7 +675,7 @@ function updateGraph(updateJson) {
 	if (heatMode) 
 	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/(sigmaNodes[i].count+1)) + "," + Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
-	    sigmaNodes[i].color = changedNodesArray[i].color;
+	    sigmaNodes[i].color = getColor(changedNodesArray[i].activity);
 	// If node is activated, light up outgoing edges
 	if (sigmaNodes[i].color == "rgb(0,255,0)" && !heatMode) {
 	    var outgoingEdges = sig.graph.outEdges(sigmaNodes[i].id),
@@ -624,7 +701,7 @@ function nodeSizeChange(val) {
     nodeSize = .1 * Math.pow(1.1, val);
     if (editor_mode)
 	sig.graph.nodes().forEach(function (n) {
-	    n.size = nodeSize;
+	    n.size = nodeSize * nodeScalar;
 	});
     sig.settings('maxNodeSize', nodeSize);
     sig.settings('zoomMin', nodeSize/80);
@@ -635,7 +712,7 @@ function edgeSizeChange(val) {
     edgeSize = .005 * Math.pow(1.2, val);
     if (editor_mode)
 	sig.graph.edges().forEach(function (e) {
-	    e.size = edgeSize;
+	    e.size = edgeSize * edgeScalar;
 	});
     sig.settings('maxEdgeSize', edgeSize);
     sig.refresh({skipIndexation: true});
@@ -647,20 +724,16 @@ function widthChange(val) {
 	n.x *= ratio;
     });
     graphWidth = val;
-    sig.refresh();
+    sig.refresh({skipIndexation: true});
 }
 
 function rotationChange(val) {
-    sig.cameras[0].goTo({angle: -1 * Math.PI / 180 * parseInt(val)});
-    sig.refresh();
+    sig.cameras[0].goTo({angle: -1 * Math.PI / 180 * +val});
+    sig.refresh({skipIndexation: true});
 }
 
 function toggleEdges() {
-    if ($('#inrender-edge-box').is(':checked'))
-	sig.settings("drawEdges", true);
-    else 
-	sig.settings("drawEdges", false);
-
+    sig.settings("drawEdges", $('#inrender-edge-box').is(':checked'));
     $('#edge-slider').toggle('disabled');
     draw_edges ^= true;
     sig.refresh({skipIndexation: true});
@@ -674,7 +747,7 @@ function toggleHeatMap() {
 	    //console.log(n.color);
 	});
 	sig.graph.edges().forEach(function (e) {
-	    e.color = "#888";
+	    delete e.color;
 	});
     }
     else {
@@ -694,12 +767,34 @@ function openSearchBar() {
 
 function resetCamera() {
     tooltips.close();
+    var camPos = {ratio: 1, x: 0, y: 0, angle: 0},
+    cam = sig.cameras[0];
+    if (!sig.settings("autoRescale")) {
+	bounds = sigma.utils.getBoundaries(sig.graph, "", true);
+	var minX = (bounds.minX == "Infinity") ? -1 : bounds.minX,
+	minY = (bounds.minY == "Infinity") ? -1 : bounds.minY,
+	maxX = (bounds.maxX == "-Infinity") ? 1 : bounds.maxX,
+	maxY = (bounds.maxY == "-Infinity") ? 1 : bounds.maxY,
+	w = sig.renderersPerCamera[cam.id][0].width || 1,
+	h = sig.renderersPerCamera[cam.id][0].height || 1,
+	scale = Math.min(w / Math.max(maxX - minX, 1), h / Math.max(maxY - minY, 1)),
+	margin = nodeSize / scale + +sig.settings('sideMargin');
+	maxX += margin;
+	maxY += margin;
+	minX -= margin;
+	minY -= margin;
+	scale = Math.min(w / Math.max(maxX - minX, 1), h / Math.max(maxY - minY, 1));
+	camPos = {x: (maxX + minX) / 2, 
+		  y: (maxY + minY) / 2, 
+		  ratio: 1 / scale, 
+		  angle: 0};
+
+    }
     sigma.misc.animation.camera(
-	sig.cameras[0],
-	{ ratio: 1, x: 0, y: 0, angle: 0 },
+	cam,
+	camPos,
 	{ duration: 150 }
     );
-    console.log(sig.cameras[0]);
     $('#angle-slider').val(0);
 }
 
@@ -727,7 +822,7 @@ function toggleChildren(nodeId) {
 
 function soloChildren(nodeId) {
     tooltips.close();
-    toKeep = sig.graph.children(nodeId, {});
+    var toKeep = sig.graph.children(nodeId, {});
     toKeep[nodeId] = sig.graph.nodes(nodeId);
  
     sig.graph.nodes().forEach(function(n) {
@@ -779,6 +874,13 @@ function printNodeData(nodeId) {
     /* DON'T REMOVE THIS */ console.log(sig.graph.nodes(nodeId));
 }
 
+function printAllNodeData() {
+    tooltips.close();
+    sig.graph.nodes().forEach(function(n) {
+	/* DON'T REMOVE THIS */ console.log(n);
+    });
+}
+
 function appendOptimizations(opt) {
     if (~window.location.href.indexOf("?a=")) {
 	var path = window.location.href.substring(window.location.href.indexOf("?a="));
@@ -788,12 +890,46 @@ function appendOptimizations(opt) {
 
 function toggleEditorMode() {
     tooltips.close();
+    // For correctly scaling/positioning the camera when switching between modes
+    // This code is tweaked from sigma.middlewares.rescale and 
+    // emulates the autoscale functionality when switching to editor mode
+    bounds = sigma.utils.getBoundaries(sig.graph, "", true);
+    var cam = sig.cameras[0],
+    // The changes to min and max allow for editor mode to be started with an empty graph
+    minX = (bounds.minX == "Infinity") ? -1 : bounds.minX,
+    minY = (bounds.minY == "Infinity") ? -1 : bounds.minY,
+    maxX = (bounds.maxX == "-Infinity") ? 1 : bounds.maxX,
+    maxY = (bounds.maxY == "-Infinity") ? 1 : bounds.maxY,
+    w = sig.renderersPerCamera[cam.id][0].width || 1,
+    h = sig.renderersPerCamera[cam.id][0].height || 1,
+    scale = Math.min(w / Math.max(maxX - minX, 1), h / Math.max(maxY - minY, 1)),
+    margin = nodeSize / scale + +sig.settings('sideMargin');
+    maxX += margin;
+    maxY += margin;
+    minX -= margin;
+    minY -= margin;
+    scale = Math.min(w / Math.max(maxX - minX, 1), h / Math.max(maxY - minY, 1));
 
     /* Start Editor mode */
     if (!editor_mode) {
 	editor_mode = true;
+
+	// Hide and disable header
+	$('#collapseHeader').collapse('hide');
+	$('#nav-hide-icon').unwrap();
+	toggleChevron();
+	
+	// Disable clickability of character stream
+	$('.input-display-table a').contents().unwrap();
+
+	// Set original colors of all nodes
+	sig.graph.nodes().forEach(function(n) {
+	    n.color = n.originalColor;
+	});
+
 	// Set background of the graph container
 	graph_container.style.backgroundColor = "#ffd";
+
 	// Show Editor Tab and hide Simulation Tools
 	$('#editor-tab').show();
 	$('#editor-tab').addClass('active');
@@ -806,14 +942,19 @@ function toggleEditorMode() {
 	$('#sim-tab').removeClass('active');
 
 	// Appropriately display nodes and edges without autoscaling
-	var cam = sig.cameras[0];
-	var camSettings = {x: cam.x, y: cam.y, ratio: cam.ratio, angle: cam.angle};
+	// Undo transformations by reversing code from sigma.middlewares.rescale
+	var camSettings = {x: +cam.x / scale + (maxX + minX) / 2, 
+			   y: +cam.y / scale + (maxY + minY) / 2, 
+			   ratio: cam.ratio / scale, 
+			   angle: cam.angle};
+	nodeScalar = 1.0 / scale;
+	edgeScalar = 1.0 / scale;
 	sig.graph.nodes().forEach(function(n) {
-	    n.size = nodeSize * cam.ratio;
+	    n.size = nodeSize * nodeScalar;
 	    n.hidden = false;
 	});
 	sig.graph.edges().forEach(function(e) {
-	    e.size = edgeSize / cam.ratio;
+	    e.size = edgeSize * edgeScalar;
 	});
 	
 	// Switch to Canvas renderer
@@ -828,6 +969,7 @@ function toggleEditorMode() {
 	sig.settings('autoRescale', false);
 	// Enable edge hovering to allow user to delete connections
 	sig.settings('enableEdgeHovering', true);
+
 
 	// Instantiate plug-ins
 	var renderer = sig.renderers[0];
@@ -846,52 +988,30 @@ function toggleEditorMode() {
 
 	// Change tooltip menu to edit features
 	sigma.plugins.killTooltips(sig);
-	var config = {
-	    node: [ 
-		{
-		    show: 'rightClickNode',
-		    cssClass: 'sigma-tooltip',
-		    position: 'right',
-		    template:
-		    '<ul class="custom-menu">' +
-			'<div class="hover-info"><p>ID: {{id}}</p>' +
-			'<p>Symbol Set: {{data.ss}}</p>' +
-			'<p>{{data.start}}</p>' +
-			'<p>{{data.rep_code}}</p></div>' +
-			'<li onClick="addEdge(\'{{id}}\')">Add Outgoing Connection</li>' +
-			'<li onClick="triggerChangeData(\'{{id}}\')">Change Data</li>' +
-			'<li onClick="deleteSTE(\'{{id}}\')">Delete STE</li>' +
-			'</ul>',
-		    renderer: function(node, template) {
-			return Mustache.render(template, node);
-		    }
-		}
-	    ],
-	    edge: {
-		show: 'rightClickEdge',
-		template: 'Clicked edge!'
-	    },
-	    stage: {
-		template:
-		'<ul class="custom-menu">' +
-		    '<li onClick="triggerAddSTE(event)">Add STE</li>' +		 
-		    '<li onClick="showAllNodes()">Show All Nodes</li>' +
-		    '<li onClick="toggleEditorMode()">Toggle Editor Mode</li>' +
-		    '<li onClick="resetCamera()">Reset Camera</li>' +
-		    '</ul>'
-	    }
-	};
-	tooltips = sigma.plugins.tooltips(sig, sig.renderers[0], config);
 
-
-	sig.refresh();
+	tooltips = sigma.plugins.tooltips(sig, renderer, tooltip_edit_config);
+	
+	sig.refresh({skipIndexation: false});
 
     }
     /* End Editor Mode */
     else {
 	editor_mode = false;
+
 	// Revert background color
 	graph_container.style.backgroundColor = "#fff";
+
+	// Reenable collapsable header
+	$('#nav-hide-icon').wrap('<a aria-controls="collapseHeader" \
+aria-expanded="true" data-toggle="collapse" href="#collapseHeader" \
+onClick="toggleChevron()" class="hide-header-btn"></a>');
+
+	// Reenable clickable character stream
+	$table.find('tr').each(function(index, row) {
+	    $(row).find('td').slice(cache_index - cache_length + 1, cache_index + 1).children().each(function(i, e) {
+		$(e).wrap("<a href='#' onClick='indexClick(" + (cache_index - cache_length + i + 1) + ")'></a>");
+	    });
+	});
 
 	// Toggle tabs
 	$('#editor-tab').hide();
@@ -909,39 +1029,21 @@ function toggleEditorMode() {
 	
 	// Revert Tooltip menu
 	sigma.plugins.killTooltips(sig);
-	var config = {
-	    node: [ 
-		{
-		    show: 'rightClickNode',
-		    cssClass: 'sigma-tooltip',
-		    position: 'right',
-		    template:
-		    '<ul class="custom-menu">' +
-			'<div class="hover-info"><p>ID: {{id}}</p>' +
-			'<p>Symbol Set: {{data.ss}}</p>' +
-			'<p>{{data.start}}</p>' +
-			'<p>{{data.rep_code}}</p></div>' +
-			'<li onClick="toggleChildren(\'{{id}}\')">Show/Hide Children</li>' +
-			'<li onClick="soloChildren(\'{{id}}\')">Solo Children</li>' +
-			'<li onClick="printNodeData(\'{{id}}\')">- Print Node Data -</li>' +
-			'</ul>',
-		    renderer: function(node, template) {
-			return Mustache.render(template, node);
-		    }
-		}
-	    ],
-	    stage: {
-		template:
-		'<ul class="custom-menu">' +
-		    '<li onClick="openSearchBar()">Search By ID</li>' +
-		    '<li onClick="showAllNodes()">Show All Nodes</li>' +
-		    '<li onClick="toggleEditorMode()">Toggle Editor Mode</li>' +
-		    '<li onClick="resetCamera()">Reset Camera</li>' +
-		    '</ul>'
-	    }
-	};
-	tooltips = sigma.plugins.tooltips(sig, sig.renderers[0], config);
+	tooltips = sigma.plugins.tooltips(sig, sig.renderers[0], tooltip_def_config);
 
+	// Remove renderer data from nodes
+	var prefix = sig.renderers[0].options.prefix;
+	sig.graph.nodes().forEach(function (n) {
+	    delete n[prefix + 'size'];
+	    delete n[prefix + 'x'];
+	    delete n[prefix + 'y'];
+	});
+
+	// Revert camera settings 
+	var camSettings = {x: (+cam.x - (maxX + minX) / 2) * scale, 
+			   y: (+cam.y - (maxY + minY) / 2) * scale, 
+			   ratio: cam.ratio * scale, 
+			   angle: cam.angle};
 
 	// Switch to WebGL renderer
 	sig.killRenderer(sig.renderers[0]);
@@ -950,16 +1052,18 @@ function toggleEditorMode() {
 	    container: document.getElementById('graph-container')
 	});
 
+	sig.cameras[0].goTo(camSettings);
+
 	// Turn autoRescale back on
 	sig.settings('autoRescale', true);
 	// Turn edge hovering off
 	sig.settings('enableEdgeHovering', false);
-
+	// Reset camera angle slider
+	$('#angle-slider').val(0);
 
 	sig.refresh();
 
-    }
-    
+    }    
 }
 
 // Editor Functions
@@ -972,12 +1076,11 @@ function triggerAddSTE() {
 function addSTE(id, ss, rep_code, start, color) {
     $('#add-ste-modal').modal('hide');
 
-    console.log(color);
     var newNode = {
 	id: id,
-	x: 0,
-	y: 0,
-	size: nodeSize,
+	x: 1,
+	y: 1,
+	size: nodeSize * nodeScalar,
 	color: color,
 	data: {
 	    ss: ss,
@@ -985,19 +1088,49 @@ function addSTE(id, ss, rep_code, start, color) {
 	    start: start
 	}
     };
-
-    dragListener.addNode(newNode);
+    
+    // First STE added in default location
+    if (sig.graph.nodes().length == 0) {
+	// First node is centered, others can be used as reference points in dragNodes
+	// They cannot be on the same axis
+	var $nodeSlider = $('#node-slider');
+	$nodeSlider.val($nodeSlider.attr("max"));
+	nodeSizeChange($nodeSlider.val());
+	newNode.size = nodeSize * nodeScalar;
+	newNode.x = 0;
+	newNode.y = 0;
+	sig.graph.addNode(newNode);
+    }
+    // Allow user to place this node
+    else
+	dragListener.addNode(newNode);
     
     sig.refresh();
     
-
 }
 
 function addEdge(sourceId) {
     tooltips.close();
     
-    dragListener.addEdge(sourceId, edgeSize);
-    select.addEdge(sourceId, edgeSize);
+    dragListener.addEdge(sourceId, edgeSize * edgeScalar);
+    select.addEdge(sourceId, edgeSize * edgeScalar);
+}
+
+function removeEdge(edgeId) {
+    tooltips.close();
+
+    var edge = sig.graph.edges(edgeId);
+    sig.graph.dropEdge(edgeId);
+    Wt.emit(Wt, "toggleConnection", edge.source, edge.target, false);
+    sig.refresh({skipIndexation: true});
+}
+
+function selectConnectedNodes(edgeId) {
+    tooltips.close();
+
+    var edge = sig.graph.edges(edgeId);
+    activeState.addNodes([edge.source, edge.target]);
+    sig.refresh({skipIndexation: true});
 }
 
 function triggerChangeData(nodeId) {
@@ -1021,4 +1154,16 @@ function updateSTEData(id, ss, start, rep, color) {
     };
     sig.graph.changeData(editNodeId, data);
 
+}
+
+function triggerDeleteSTE(nodeId) {
+    tooltips.close();
+    $('#delete-ste-modal').modal('show');
+    Wt.emit(Wt, "deleteSTE", nodeId);
+}
+
+function deleteSTE(nodeId) {
+    $('#delete-ste-modal').modal('hide');    
+    sig.graph.dropNode(nodeId);
+    sig.refresh();
 }

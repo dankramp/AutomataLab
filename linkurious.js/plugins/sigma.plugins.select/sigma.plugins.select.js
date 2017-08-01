@@ -97,15 +97,16 @@
 
       var target = event.data.node[0].id;
 	if (addEdge) {
+	    var edgeNum = (s.graph.edges().length > 0) ? Number(s.graph.edges().slice(-1)[0].id.substring(1)) + 1 : 0;
 	    var edge = {
-		id: "e" + s.graph.edges().length,
+		id: "e" + edgeNum,
 		source: sourceId,
 		target: target,
 		size: edgeSize
 	    };
 	    s.graph.addEdge(edge);
 	    addEdge = false;
-	    Wt.emit(Wt, 'addEdge', sourceId, target);
+	    Wt.emit(Wt, 'toggleConnection', sourceId, target, true);
 	    sourceId = null;
 	    s.refresh({skipIndexation: true});
 
@@ -190,6 +191,7 @@
       if (mousemoveCount > 1) return;
 
       var target = event.data.edge[0].id;
+	console.log(target);
       var actives = a.edges().map(function(e) {
         return e.id;
       });
@@ -255,7 +257,6 @@
     }
 
     // Drop selected nodes and edges
-      /*
     function spaceDel() {
       var nodes = a.nodes().map(function(n) { return n.id; }),
         edges = a.edges().map(function(e) { return e.id; });
@@ -272,7 +273,7 @@
       }
 
       s.refresh();
-    }*/
+    }
 
     // Select neighbors of selected nodes
     function spaceE() {
@@ -300,7 +301,7 @@
 
     s.bind('clickNodes', this.clickNodesHandler);
     s.bind('doubleClickNodes', this.doubleClickNodesHandler);
-    s.bind('rightClickEdges', this.clickEdgesHandler);
+    //s.bind('clickEdges', this.clickEdgesHandler);
     s.bind('clickStage', this.clickStageHandler);
 
     _body.addEventListener('keydown', keyDown, false);
@@ -414,7 +415,7 @@
     this.clear = function() {
       s.unbind('clickNodes', self.clickNodesHandler);
       s.unbind('doubleClickNodes', self.doubleClickNodesHandler);
-      s.unbind('clickEdges', self.clickEdgesHandler);
+      //s.unbind('clickEdges', self.clickEdgesHandler);
       s.unbind('clickStage', self.clickStageHandler);
 
       self.unbindKeyboard();

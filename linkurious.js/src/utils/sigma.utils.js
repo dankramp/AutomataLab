@@ -534,7 +534,7 @@
     *                          segment, false otherwise.
   */
   sigma.utils.isPointOnSegment = function(x, y, x1, y1, x2, y2, epsilon) {
-    return sigma.utils.distancePointToSegment(x, y, x1, y1, x2, y2) < epsilon;
+      return sigma.utils.distancePointToSegment(x, y, x1, y1, x2, y2) < epsilon;
   };
 
   /**

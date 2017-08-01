@@ -43,11 +43,13 @@ public:
   void beginSimulation();
   void addToJSCache(int numGraphs);
   void loadDemoGraph(std::string name, bool user);
-  void addEdge(std::string sourceId, std::string targetId);
+  void toggleConnection(std::string sourceId, std::string targetId, bool addEdge);
   void changeSTEData(std::string id, std::string ss, std::string start, std::string rep);
+  void deleteSTE(std::string id);
  
-  Wt::JSignal<std::string, std::string> addEdge_;
+  Wt::JSignal<std::string, std::string, bool> toggleConnection_;
   Wt::JSignal<std::string, std::string, std::string, std::string> changeSTEData_;
+  Wt::JSignal<std::string> deleteSTE_;
 
 private:
   std::string fn;
@@ -71,6 +73,7 @@ private:
   Wt::WComboBox *ste_start_select;
   Wt::WPushButton *ste_options_create_btn;
   std::string ste_id;
+  Wt::WText *delete_modal_text;
 
   Automata ap;
   json11::Json cache = json11::Json::array{};
@@ -87,12 +90,14 @@ private:
 
 VASimViz::VASimViz(const Wt::WEnvironment& env)
   : Wt::WApplication(env),
-    addEdge_(this, "addEdge"),
-    changeSTEData_(this, "changeSTEData")
+    toggleConnection_(this, "toggleConnection"),
+    changeSTEData_(this, "changeSTEData"),
+    deleteSTE_(this, "deleteSTE")
 {
 
-  addEdge_.connect(this, &VASimViz::addEdge);
+  toggleConnection_.connect(this, &VASimViz::toggleConnection);
   changeSTEData_.connect(this, &VASimViz::changeSTEData);
+  deleteSTE_.connect(this, &VASimViz::deleteSTE);
 
   // Set page title
   setTitle("ANML Viewer");
@@ -114,9 +119,10 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/linkurious.js/src/sigma.settings.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/classes/sigma.classes.dispatcher.js");
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.configurable.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.graph.js");
+  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.graph.js"); // this makes RandomForest fast/slow
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.camera.js");
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.quad.js");
+  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.edgequad.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.mouse.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.touch.js");
 
@@ -159,7 +165,6 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.locate/sigma.plugins.locate.js");
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.tooltips/sigma.plugins.tooltips.js");
-  Wt::WApplication::instance()->require("https://cdnjs.cloudflare.com/ajax/libs/mustache.js/0.8.1/mustache.min.js");  
 
   // Linkurious renderer
   Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/settings.js");
@@ -173,7 +178,12 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->requireJQuery("https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js");
   // Bootstrap
   Wt::WApplication::instance()->require("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js");
+  // Mustache
+  Wt::WApplication::instance()->require("https://cdnjs.cloudflare.com/ajax/libs/mustache.js/0.8.1/mustache.min.js");  
+  // FileSaver
+  Wt::WApplication::instance()->require("FileSaver.js/FileSaver.js");  
   // Custom page scripts
+  Wt::WApplication::instance()->require("js/Viewer-Settings.js");
   Wt::WApplication::instance()->require("js/page_script.js");
   Wt::WApplication::instance()->require("js/sigma_script.js"); 
 
@@ -394,6 +404,40 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
       }));
   Wt::WText *search_button = new Wt::WText("<button class='btn btn-secondary' id='search-btn' onClick='searchById()' data-dismiss='modal' type='button'>Search</button>", Wt::XHTMLUnsafeText, search_modal_input_group);
   search_button->setStyleClass("input-group-btn");
+
+  /* Delete By ID Modal */
+
+  Wt::WContainerWidget *delete_modal = new Wt::WContainerWidget(root());  
+  delete_modal->setStyleClass("modal bs-example-modal-sm");
+  delete_modal->setId("delete-ste-modal");
+  delete_modal->setAttributeValue("role", "dialog");
+  delete_modal->setAttributeValue("aria-hidden", "true");
+  delete_modal->setAttributeValue("tabindex", "-1");
+  Wt::WContainerWidget *delete_modal_dialog = new Wt::WContainerWidget(delete_modal);
+  delete_modal_dialog->setStyleClass("modal-dialog modal-sm");
+  delete_modal_dialog->setAttributeValue("role", "document");
+  Wt::WContainerWidget *delete_modal_content = new Wt::WContainerWidget(delete_modal_dialog);
+  delete_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *delete_modal_header = new Wt::WContainerWidget(delete_modal_content);
+  delete_modal_header->setStyleClass("modal-header");
+  delete_modal_header->addWidget(new Wt::WText("<h3 class='modal-title'>Confirm Delete</h3>"));
+  Wt::WContainerWidget *delete_modal_body = new Wt::WContainerWidget(delete_modal_content);
+  delete_modal_body->setStyleClass("modal-body");
+  delete_modal_text = new Wt::WText("Are you sure you want to delete this STE?", delete_modal_body);
+  Wt::WContainerWidget *delete_modal_footer = new Wt::WContainerWidget(delete_modal_content);
+  delete_modal_footer->setStyleClass("modal-footer");
+  Wt::WPushButton *delete_modal_cancel_btn = new Wt::WPushButton("No", delete_modal_footer);
+  delete_modal_cancel_btn->setStyleClass("btn btn-default");
+  delete_modal_cancel_btn->setAttributeValue("data-dismiss", "modal");
+  Wt::WPushButton *delete_modal_confirm_btn = new Wt::WPushButton("Yes", delete_modal_footer);
+  delete_modal_confirm_btn->setId("delete-ste-btn");
+  delete_modal_confirm_btn->setStyleClass("btn btn-danger");
+  delete_modal_confirm_btn->setAttributeValue("data-dismiss", "modal");
+  delete_modal_confirm_btn->clicked().connect(std::bind( [=]() {
+	std::cout << "id: '" << ste_id << "'" << std::endl;
+	ap.removeElement(ap.getElements()[ste_id]);
+	doJavaScript("deleteSTE('" + ste_id + "')");
+      }));
 
   /* Loading modal */
 
@@ -628,11 +672,24 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
 	    if (editingSTE) {
 	      STE * element = static_cast <STE *>(ap.getElements()[ste_id]);
+	      if (ste_start_select->currentText().narrow() == "none") {
+		// If start type is none, remove from the start STEs vector
+		auto starts = ap.getStarts();
+		for (auto it = starts.begin(); it != starts.end(); ++it) {
+		  if ((*it)->getId() == ste_id) {
+		    starts.erase(it);
+		    break;
+		  }
+		}
+		starts.erase(std::remove(starts.begin(), starts.end(), element), starts.end());
+		std::cout << "Removed start STE" << std::endl;
+	      }
 	      element->setId(id);
 	      element->setReporting(rep.length() > 0);
 	      element->setReportCode(ste_rep_input->text().toUTF8());
 	      element->setSymbolSet(ss);
 	      element->setStart(ste_start_select->currentText().narrow());
+
 	      doJavaScript("updateSTEData('" + id + "','" + ss + "','" + start + "','" + rep + "','" + color + "')");
 	      ste_options_title->setText("Create STE");
 	      ste_options_create_btn->setText("Create STE"); 
@@ -731,6 +788,9 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WCheckBox *heat_mode_check = new Wt::WCheckBox(" Heat Map Mode", footer_table->elementAt(1,4));
   heat_mode_check->setId("heat-mode-box");
   heat_mode_check->setChecked(false);
+  Wt::WPushButton *graph_legend_btn = new Wt::WPushButton("View Graph Legend", footer_table->elementAt(1,5));
+  graph_legend_btn->setStyleClass("btn btn-default");
+  graph_legend_btn->setId("graph-legend-btn");
 
 
   // ************************ //
@@ -818,6 +878,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   editor_tools_table->elementAt(0,2)->addWidget(new Wt::WText("Select All"));
   editor_tools_table->elementAt(0,3)->addWidget(new Wt::WText("Unselect All"));
   editor_tools_table->elementAt(0,4)->addWidget(new Wt::WText("Select Neighbors"));
+  editor_tools_table->elementAt(0,5)->addWidget(new Wt::WText("Select Multiple"));
 
   /* Table Inputs */
   Wt::WPushButton *toggle_lasso = new Wt::WPushButton("Lasso Tool", editor_tools_table->elementAt(1,0));
@@ -829,6 +890,38 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WText *spaceA = new Wt::WText("<kbd>spacebar</kbd> + <kbd>a</kbd>", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,2));
   Wt::WText *spaceU = new Wt::WText("<kbd>spacebar</kbd> + <kbd>u</kbd>", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,3));
   Wt::WText *spaceE = new Wt::WText("<kbd>spacebar</kbd> + <kbd>e</kbd>", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,4));
+  Wt::WText *spaceClick = new Wt::WText("<kbd>spacebar</kbd> + Left Click", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,5));
+  Wt::WPushButton *save_anml_btn = new Wt::WPushButton("Save ANML File", editor_tools_table->elementAt(1,6));
+  save_anml_btn->setStyleClass("btn btn-primary");
+  save_anml_btn->setId("save-anml-btn");
+  save_anml_btn->clicked().connect(std::bind ( [=] () {
+	// Export code from VASim
+	std::string str = "";
+
+	// xml header
+	str += "<anml version=\"1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n";
+	str += "<automata-network id=\"vasim\">\n";
+
+	for(auto el : ap.getElements()) {
+	  str += el.second->toANML();
+	  str += "\n";
+	}
+
+	// xml footer
+	str += "</automata-network>\n";
+	str += "</anml>\n";
+	
+	// Unescape all escaped newline characters
+	int start_pos = 0;
+	while ((start_pos = str.find("\n", start_pos)) != std::string::npos) {
+	  str.replace(start_pos, 1, "\\n");
+	  start_pos += 3;
+	}
+
+	doJavaScript("exportFile('automata_file.anml', '" + str + "\')");
+      }));
+  
+  
 
   /* Graph container */
 
@@ -936,9 +1029,12 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
 }
 
-void VASimViz::addEdge(std::string sourceId, std::string targetId) {
+void VASimViz::toggleConnection(std::string sourceId, std::string targetId, bool add) {
   auto elements = ap.getElements();
-  ap.addEdge(elements[sourceId], elements[targetId]);
+  if (add)
+    ap.addEdge(elements[sourceId], elements[targetId]);
+  else
+    ap.removeEdge(elements[sourceId], elements[targetId]);
 }
 
 void VASimViz::changeSTEData(std::string id, std::string ss, std::string start, std::string rep) {
@@ -964,6 +1060,11 @@ void VASimViz::changeSTEData(std::string id, std::string ss, std::string start, 
   editingSTE = true;
 
   doJavaScript("$('#add-ste-modal').modal('show')");
+}
+
+void VASimViz::deleteSTE(std::string id) {
+  ste_id = id;
+  delete_modal_text->setText("Are you sure you want to delete <b>" + id + "</b>?");
 }
 
 /*

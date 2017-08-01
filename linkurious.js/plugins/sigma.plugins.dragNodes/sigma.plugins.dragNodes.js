@@ -221,10 +221,11 @@
 	    return;
 	// If we have not left a node
       if (event.data.leave.nodes.length == 0) {
-	  $('#graph-container').css( 'cursor', 'move' );
 	  if (_addEdge) 
 	      $('#graph-container').css( 'cursor', 'pointer' );
-        return;
+	  else
+	      $('#graph-container').css( 'cursor', 'move' );
+          return;
       }
 	if (_addEdge) {
 	    return;
@@ -251,6 +252,9 @@
 	    _addEdge = false;
 	    // Remove temporary node and edge from graph
 	    _s.graph.dropNode("_temp_add_edge_node_");
+	    _node = null;
+	    _hoveredNode = null;
+	    _s.refresh({skipIndexation: true});
 	}
       if (_node && _s.graph.nodes().length > 0) {
         //_sticky = true;
@@ -353,7 +357,7 @@
 
         dist = sigma.utils.getDistance(x, y, _node[_prefix + 'x'],_node[_prefix + 'y']);
 
-          //if (_sticky && dist < _node[_prefix + 'size']) return;
+        if (_sticky && dist < _node[_prefix + 'size']) return;
         _sticky = false;
 
         // Find two reference points and derotate them
@@ -379,7 +383,7 @@
             if (ref[0].x == ref[1].x || ref[0].y == ref[1].y) {
               ref.pop() // drop last nodes and try to find another one
             } else { // we managed to find two nodes not aligned
-              break
+              break;
             }
           }
         }
@@ -392,12 +396,16 @@
 
         var divy = (b.renY - a.renY);
         if (divy === 0) divy = 1; //fix edge case where axis are aligned
+	  
+	  console.log("divx: " + divx + ", divy: " + divy);
 
         x = ((x - a.renX) / divx) * (b.x - a.x) + a.x;
         y = ((y - a.renY) / divy) * (b.y - a.y) + a.y;
+	  console.log("x: " + x + ", y: " + y);
 
         x2 = x * cos - y * sin;
         y2 = y * cos + x * sin;
+	  console.log("x2: " + x2 + ", y2: " + y2);
 
         // Drag multiple nodes, Keep distance
         if(_a) {
@@ -412,8 +420,8 @@
             for(var i = 0; i < activeNodes.length; i++) {
               // Delete old reference
               if(_draggingNode != _node) {
-                activeNodes[i].alphaX = undefined;
-                activeNodes[i].alphaY = undefined;
+                delete activeNodes[i].alphaX; // = undefined;
+                delete activeNodes[i].alphaY; // = undefined;
               }
 
               // Calcul first position of activeNodes

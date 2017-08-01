@@ -136,7 +136,7 @@
       c = (settings('maxEdgeSize') - settings('minEdgeSize')) / weightMax;
       d = +settings('minEdgeSize');
     }
-
+      
     // Rescale the nodes and edges:
     for (i = 0, l = e.length; i < l; i++)
       e[i][writePrefix + 'size'] =

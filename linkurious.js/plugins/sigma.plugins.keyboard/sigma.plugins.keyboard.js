@@ -128,13 +128,13 @@
       self.domElt.addEventListener('keydown', self.keyDown);
       self.domElt.addEventListener('keyup', self.keyUp);
 
-      self.bind('37 18+37', moveLeft); // (ALT +) LEFT ARROW
-      self.bind('38 18+38', moveTop); // (ALT +) TOP ARROW
-      self.bind('39 18+39', moveRight); // (ALT +) RIGHT ARROW
-      self.bind('40 18+40', moveDown); // (ALT +) BOTTOM ARROW
+      //self.bind('37 18+37', moveLeft); // (ALT +) LEFT ARROW
+      //self.bind('38 18+38', moveTop); // (ALT +) TOP ARROW
+      //self.bind('39 18+39', moveRight); // (ALT +) RIGHT ARROW
+      //self.bind('40 18+40', moveDown); // (ALT +) BOTTOM ARROW
 
-      self.bind('32+38 18+32+38', zoomIn); // (ALT +) SPACE + TOP ARROW
-      self.bind('32+40 18+32+40', zoomOut); // (ALT +) SPACE + BOTTOM ARROW
+      //self.bind('32+38 18+32+38', zoomIn); // (ALT +) SPACE + TOP ARROW
+      //self.bind('32+40 18+32+40', zoomOut); // (ALT +) SPACE + BOTTOM ARROW
     }
 
     function unbindAll() {

@@ -68,7 +68,7 @@ class SigmaJSONWriter {
 	changedNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
 	      {"count", std::to_string(enabledCount[s]) },	      
-		{"color", "rgb(255,0,255)"}
+		{"activity", "reporting"}
 	  });
 	reportNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
@@ -93,7 +93,7 @@ class SigmaJSONWriter {
 	changedNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
 	      {"count", std::to_string(enabledCount[s]) },
-		{"color", "rgb(0,255,0)"}
+		{"activity", "activated"}
 	  });
       s->mark();
     }
@@ -113,7 +113,7 @@ class SigmaJSONWriter {
 	changedNodes.push_back(json11::Json::object { 
 	    {"id", s->getId() },
 	      {"count", std::to_string(enabledCount[s]) },
-		{"color", "rgb(255,255,0)"}
+		{"activity", "enabled"}
 	  });
       s->mark();
     }
@@ -161,57 +161,57 @@ class SigmaJSONWriter {
       return xPos;
     parent->mark();
 
-    // Set color and label based on element type
-    std::string color = "";
-    //std::string label = "";
-    std::string data_string;
+    // Set type based on element type
+    std::string type = "";
+    std::string data_string = "{";
     std::string err;
     json11::Json data;
     switch (parent->getType()) {
     case ElementType::STE_T:
-      if (parent->isReporting())
-	color = "rgb(255,150,0)";
-      else if (static_cast<STE *>(parent)->isStart())
-	color = "rgb(100,100,100)";
-      else
-	color = "rgb(158,185,212)";
-      //color= "#9eb9d4";
-      data_string = "{\"ss\": \"" + static_cast<STE *>(parent)->getSymbolSet() + "\"";
+      // Add symbol set to data
+      data_string += "\"ss\": \"" + static_cast<STE *>(parent)->getSymbolSet() + "\", ";
 
-      //label = "id: " + parent->getId() + "\nss: \"" + static_cast<STE *>(parent)->getSymbolSet() + "\"";
       if (parent->isReporting()) {
-	//label += "\nreport code: " + parent->getReportCode();
-	data_string += ", \"rep_code\": \"Report Code: " + parent->getReportCode() + "\"";
+	type = "report";
+	data_string += "\"rep_code\": \"Report Code: " + parent->getReportCode() + "\", ";
       }
-      if (static_cast<STE *>(parent)->isStart()) {
-	//label += "\nstart: " + static_cast<STE *>(parent)->getStringStart();
-	data_string += ", \"start\": \"Start Type: " + static_cast<STE *>(parent)->getStringStart() + "\"";
+      else if (static_cast<STE *>(parent)->isStart()) {
+	type = "start";
+	data_string += "\"start\": \"Start Type: " + static_cast<STE *>(parent)->getStringStart() + "\", ";
       }
-      data_string += "}";
-      data = json11::Json::parse(data_string, err);
+      else
+	type = "node";
+      
       break;
     case ElementType::OR_T:
-      color = "rgb(255,0,255)";
-      //label = "OR";
+      type = "OR";
       break;
     case ElementType::AND_T:
-      color = "rgb(255,0,255)";
-      //label = "AND";
+      type = "AND";
       break;
     case ElementType::COUNTER_T:
-      color = "rgb(255,0,255)";
-      //label = "COUNTER";
+      type = "COUNTER";
       break;
     case ElementType::INVERTER_T:
-      color = "rgb(255,0,255)";
-      //label = "INVERTER";
+      type = "INVERTER";
       break;
     case ElementType::NOR_T:
-      color = "rgb(255,0,255)";
-      //label = "NOR";
+      type = "NOR";
       break;
     }
-      
+    // All elements will have the type parameter at a minimum
+    data_string += "\"type\": \"" + type + "\"}";
+ 
+    // Escape all '\x' so they are properly added
+    int start_pos = 0;
+    while ((start_pos = data_string.find(R"(\)", start_pos)) != std::string::npos) {
+      data_string.replace(start_pos, 1, R"(\\)");
+      start_pos += 2;
+    }
+    std::cout << data_string << std::endl;
+    data = json11::Json::parse(data_string, err);
+    std::cout << err << std::endl;
+
     // Base case: no children
     if (parent->getOutputs().empty()) {
       if (DEBUG) 
@@ -219,11 +219,9 @@ class SigmaJSONWriter {
       // Add this node with all current info
       n.push_back(json11::Json::object{
 	  {"id", parent->getId() },
-	    //	    {"label", label },
-	      {"data", data },
-	      {"color", color },
-		{"x", std::to_string(xPos) },
-		  {"y", std::to_string(y) }
+	    {"data", data },
+	      {"x", std::to_string(xPos) },
+		{"y", std::to_string(y) }
 	});
       return xPos;
     }
@@ -285,11 +283,9 @@ class SigmaJSONWriter {
       
       n.push_back(json11::Json::object{
 	  {"id", parent->getId() },
-	    //	    {"label", label },
-	      {"data", data },
-	      {"color", color },
-		{"x", std::to_string((low + high + 1)/2) },
-		  {"y", std::to_string(y) }
+	    {"data", data },
+	      {"x", std::to_string((low + high + 1)/2) },
+		{"y", std::to_string(y) }
 	});
 
       if (DEBUG) 
