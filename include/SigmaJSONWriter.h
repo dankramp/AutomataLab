@@ -202,7 +202,7 @@ class SigmaJSONWriter {
     // All elements will have the type parameter at a minimum
     data_string += "\"type\": \"" + type + "\"}";
  
-    // Escape all '\x' so they are properly added
+    // Unescape all escaped characters so they are properly displayed
     int start_pos = 0;
     while ((start_pos = data_string.find(R"(\)", start_pos)) != std::string::npos) {
       data_string.replace(start_pos, 1, R"(\\)");

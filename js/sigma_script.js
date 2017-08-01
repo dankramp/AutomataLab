@@ -44,9 +44,10 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 	data: {
 	    ss: data.ss,
 	    rep_code: data.rep_code,
-	    start: data.start
+	    start: data.start,
+	    type: data.type
 	},
-	color: data.color,
+	color: getColor(data.type),
 	x: node.x,
 	y: node.y,
 	size: node.size
@@ -55,11 +56,10 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
     out_index = this.outNeighborsIndex[nodeId] || {},
     k,
     e;
-    
 
     if (nodeId == data.id) {
 	node.data = newNode.data;
-	node.color = data.color;
+	node.color = newNode.color;
 	return;
     }
     // Add new node
@@ -95,7 +95,7 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 
     sig.graph.dropNode(nodeId);
     
-    sig.refresh();
+    sig.refresh({skipIndexation: true});
 });
 
 // Simple function to convert a string to a number
@@ -164,6 +164,7 @@ var graph_container;
 
 // Called on page load
 function pageLoad() {
+
     // Loading the default settings for a sigma instance
     sig_settings = {
 	skipIndexation: true,
@@ -1073,7 +1074,7 @@ function triggerAddSTE() {
     $('#add-ste-modal').modal('show');
 }
 
-function addSTE(id, ss, rep_code, start, color) {
+function addSTE(id, ss, rep_code, start, type) {
     $('#add-ste-modal').modal('hide');
 
     var newNode = {
@@ -1081,11 +1082,12 @@ function addSTE(id, ss, rep_code, start, color) {
 	x: 1,
 	y: 1,
 	size: nodeSize * nodeScalar,
-	color: color,
+	color: getColor(type),
 	data: {
 	    ss: ss,
 	    rep_code: rep_code,
-	    start: start
+	    start: start,
+	    type: type
 	}
     };
     
@@ -1143,17 +1145,16 @@ function triggerChangeData(nodeId) {
     Wt.emit(Wt, "changeSTEData", node.id, node.data.ss, start, rep);
 }
 
-function updateSTEData(id, ss, start, rep, color) {
+function updateSTEData(id, ss, start, rep, type) {
     $('#add-ste-modal').modal('hide');
     var data = {
 	id: id,
 	ss: ss,
 	start: start,
 	rep_code: rep,
-	color: color
+	type: type
     };
     sig.graph.changeData(editNodeId, data);
-
 }
 
 function triggerDeleteSTE(nodeId) {
@@ -1167,3 +1168,4 @@ function deleteSTE(nodeId) {
     sig.graph.dropNode(nodeId);
     sig.refresh();
 }
+

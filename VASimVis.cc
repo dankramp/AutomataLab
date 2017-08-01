@@ -188,13 +188,20 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("js/sigma_script.js"); 
 
 
+  // Full page container
+  Wt::WContainerWidget *full_page_container = new Wt::WContainerWidget(root());
+  full_page_container->setId("page-container");
+
+
+
   // ******************* //
   // *** PAGE HEADER *** //
   // ******************* //
 
 
-  Wt::WContainerWidget *fixed_header = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *fixed_header = new Wt::WContainerWidget(full_page_container);
   fixed_header->setStyleClass("fixed-header");
+  fixed_header->setId("header");
   Wt::WContainerWidget *collapse_in = new Wt::WContainerWidget(fixed_header);
   collapse_in->setStyleClass("collapse in");
   collapse_in->setId("collapseHeader");
@@ -290,7 +297,6 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   glyphicon_chevron->setStyleClass("glyphicon glyphicon-chevron-up");
   glyphicon_chevron->setId("nav-hide-icon");
   glyphicon_chevron->setAttributeValue("aria-hidden", "true");
-  
 
 
   // ************** //
@@ -300,7 +306,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Error Modal */
 
-  Wt::WContainerWidget *error_modal = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *error_modal = new Wt::WContainerWidget(full_page_container);
   error_modal->setStyleClass("modal fade");
   error_modal->setId("error-modal");
   error_modal->setAttributeValue("tabindex", "-1");
@@ -326,7 +332,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Type Input Modal */
 
-  Wt::WContainerWidget *text_input_modal = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *text_input_modal = new Wt::WContainerWidget(full_page_container);
   text_input_modal->setStyleClass("modal fade");
   text_input_modal->setId("text-input-modal");
   text_input_modal->setAttributeValue("tabindex", "-1");
@@ -361,7 +367,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Simulating Cache modal */
 
-  Wt::WContainerWidget *small_modal = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *small_modal = new Wt::WContainerWidget(full_page_container);
   small_modal->setStyleClass("modal bs-example-modal-sm");
   small_modal->setId("cache-modal");
   small_modal->setAttributeValue("role", "dialog");
@@ -377,7 +383,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Search By ID Modal */
 
-  Wt::WContainerWidget *search_modal = new Wt::WContainerWidget(root());  
+  Wt::WContainerWidget *search_modal = new Wt::WContainerWidget(full_page_container);  
   search_modal->setStyleClass("modal bs-example-modal-sm");
   search_modal->setId("search-modal");
   search_modal->setAttributeValue("role", "dialog");
@@ -407,7 +413,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Delete By ID Modal */
 
-  Wt::WContainerWidget *delete_modal = new Wt::WContainerWidget(root());  
+  Wt::WContainerWidget *delete_modal = new Wt::WContainerWidget(full_page_container);  
   delete_modal->setStyleClass("modal bs-example-modal-sm");
   delete_modal->setId("delete-ste-modal");
   delete_modal->setAttributeValue("role", "dialog");
@@ -441,7 +447,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Loading modal */
 
-  Wt::WContainerWidget *load_modal = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *load_modal = new Wt::WContainerWidget(full_page_container);
   load_modal->setStyleClass("modal bd-example-modal-sm");
   load_modal->setId("loading-graph-modal");
   load_modal->setAttributeValue("tabindex", "-1");
@@ -464,7 +470,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   
   /* ANML Construction Options modal */
 
-  Wt::WContainerWidget *options_modal = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *options_modal = new Wt::WContainerWidget(full_page_container);
   options_modal->setStyleClass("modal fade");
   options_modal->setId("options-modal");
   options_modal->setAttributeValue("tabindex", "-1");
@@ -540,7 +546,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Add STE Dialog */
 
-  Wt::WContainerWidget *ste_options_modal = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *ste_options_modal = new Wt::WContainerWidget(full_page_container);
   ste_options_modal->setId("add-ste-modal");
   ste_options_modal->setStyleClass("modal fade");
   ste_options_modal->setAttributeValue("tabindex", "-1");
@@ -656,21 +662,21 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	    std::string ss = ste_ss_input->text().narrow();
 	    std::string rep = (reporting_check->isChecked()) ? ("Report Code: " + ste_rep_input->text().narrow()) : "";
 	    std::string start = (ste_start_select->currentIndex() > 0) ? ("Start Type: " +  ste_start_select->currentText().narrow()) : "";
-	    std::string color = "rgb(158,185,212)";
+	    std::string type = "node";
 
 	    STE *newSTE = new STE(id, ss, ste_start_select->currentText().toUTF8());
 
 	    // If reporting
 	    if (rep.length() > 0) {
-	      color = "rgb(255,150,0)";
+	      type = "report";
 	      newSTE->setReporting(true);
 	      newSTE->setReportCode(ste_rep_input->text().toUTF8());
 	    }
 	    // If start
 	    else if (start.length() > 0)
-	      color = "rgb(100,100,100)";
+	      type = "start";
 
-	    if (editingSTE) {
+	    if (editingSTE) { // If editing existing STE, update automata reference and graph visual
 	      STE * element = static_cast <STE *>(ap.getElements()[ste_id]);
 	      if (ste_start_select->currentText().narrow() == "none") {
 		// If start type is none, remove from the start STEs vector
@@ -690,15 +696,15 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	      element->setSymbolSet(ss);
 	      element->setStart(ste_start_select->currentText().narrow());
 
-	      doJavaScript("updateSTEData('" + id + "','" + ss + "','" + start + "','" + rep + "','" + color + "')");
-	      ste_options_title->setText("Create STE");
+	      doJavaScript("updateSTEData('" + id + "','" + ss + "','" + start + "','" + rep + "','" + type + "')");
+	      ste_options_title->setText("<h3 class='modal-title'>Create STE</h3>");
 	      ste_options_create_btn->setText("Create STE"); 
 	      editingSTE = false;
 	    }
 	    else {// Add the STE to the automata and the node to the graph
 	      ap.rawAddSTE(newSTE);
-	      std::cout << "addSTE('" << id << "','" << ss << "','" << rep << "','" << start << "','" << color << "')" << std::endl;
-	      doJavaScript("addSTE('" + id + "','" + ss + "','" + rep + "','" + start + "','" + color + "')");
+	      std::cout << "addSTE('" << id << "','" << ss << "','" << rep << "','" << start << "','" << type << "')" << std::endl;
+	      doJavaScript("addSTE('" + id + "','" + ss + "','" + rep + "','" + start + "','" + type + "')");
 	    }
 
 	    // Reset modal
@@ -724,7 +730,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   // ************** //
 
 
-  Wt::WContainerWidget *footer = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *footer = new Wt::WContainerWidget(full_page_container);
   footer->setStyleClass("footer");
 
   /* Character stream table */
@@ -788,9 +794,10 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WCheckBox *heat_mode_check = new Wt::WCheckBox(" Heat Map Mode", footer_table->elementAt(1,4));
   heat_mode_check->setId("heat-mode-box");
   heat_mode_check->setChecked(false);
-  Wt::WPushButton *graph_legend_btn = new Wt::WPushButton("View Graph Legend", footer_table->elementAt(1,5));
+  Wt::WAnchor *graph_legend_btn = new Wt::WAnchor("graphLegend.html", "View Graph Legend", footer_table->elementAt(1,5));
   graph_legend_btn->setStyleClass("btn btn-default");
   graph_legend_btn->setId("graph-legend-btn");
+  graph_legend_btn->setAttributeValue("onClick", "javascript:window.open(\"graphLegend.html\", \"Graph Legend\", \"menubar=0,resizable=0,width=350,height=350\"); return false;");
 
 
   // ************************ //
@@ -925,7 +932,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
   /* Graph container */
 
-  Wt::WContainerWidget *container = new Wt::WContainerWidget(root());
+  Wt::WContainerWidget *container = new Wt::WContainerWidget(full_page_container);
   container->setId("container");
   Wt::WContainerWidget *graph_container = new Wt::WContainerWidget(container);
   graph_container->setId("graph-container");
