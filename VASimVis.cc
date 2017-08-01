@@ -666,6 +666,13 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 
 	    STE *newSTE = new STE(id, ss, ste_start_select->currentText().toUTF8());
 
+	    // Unescape all escaped characters
+	    int start_pos = 0;
+	    while ((start_pos = ss.find(R"(\)", start_pos)) != std::string::npos) {
+	      ss.replace(start_pos, 1, R"(\\)");
+	      start_pos += 2;
+	    }
+
 	    // If reporting
 	    if (rep.length() > 0) {
 	      type = "report";

@@ -102,11 +102,11 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 function toInt(n){ return Math.round(Number(n)); };
 
 // Default page settings
-var page_settings = new Settings();
+var page_settings = new Settings().settings();
 
 // Sigma variables
 var sig = new sigma();
-var changedGraph = new sigma.classes.graph();
+var changedGraph = {nodes: [], edges: []};
 var cachedGraphs;
 var locate_plugin;
 var tooltips;
@@ -165,6 +165,9 @@ var graph_container;
 // Called on page load
 function pageLoad() {
 
+    var sheets = document.styleSheets;
+    console.log(sheets);
+
     // Loading the default settings for a sigma instance
     sig_settings = {
 	skipIndexation: true,
@@ -174,10 +177,10 @@ function pageLoad() {
 	edgeColor: "default",
 	drawEdges: draw_edges,
 	edgeHoverColor: "default",
-	defaultEdgeHoverColor: "#f00",
+	defaultEdgeHoverColor: page_settings['edgeHoverColor'],
 	edgeHoverSizeRatio: 1.3,
 	edgeHoverExtremities: true,
-	defaultEdgeColor: "#888",
+	defaultEdgeColor: page_settings['defaultEdgeColor'],
 	defaultEdgeType: "arrow",
 	defaultNodeType: "fast",
 	maxNodeSize: nodeSize,
@@ -193,7 +196,7 @@ function pageLoad() {
 	// Plugin stuff	
 	mouseEnabled: true,
 	touchEnabled: true,
-	defaultNodeActiveBorderColor: '#ff7',
+	defaultNodeActiveBorderColor: page_settings['selectedSTEBorderColor'],
 	nodeBorderSize: 0,
 	nodeActiveBorderSize: 2
     };
@@ -294,6 +297,7 @@ function pageLoad() {
     graph_container = document.getElementById("graph-container");
     graph_container.style.top = document.getElementById("click-collapse-bar").offsetHeight + "px";
     graph_container.style.height = "calc(100% - " + document.getElementsByClassName("footer")[0].offsetHeight + "px - " + document.getElementById("click-collapse-bar").offsetHeight + "px)";
+    graph_container.style.background = page_settings['stageBGColor'];
     
     /* INPUT LISTENERS */
 
@@ -440,7 +444,7 @@ function resetSimulation() {
     playSim = false;
     updatingCache = false;
     cachedGraphs = {};
-    changedGraph.clear();
+    changedGraph = {nodes: [], edges: []};
     reportRecord = "";
     $download_rep_btn.hide();
     textFile = null;
@@ -586,21 +590,21 @@ function getColor(type) {
     switch (type) {
 	// Inactive
     case "node":
-	return page_settings.settings()["defaultSTEColor"];
+	return page_settings["defaultSTEColor"];
     case "start":
-	return page_settings.settings()["defaultStartSTEColor"];
+	return page_settings["defaultStartSTEColor"];
     case "report":
-	return page_settings.settings()["defaultReportSTEColor"];
+	return page_settings["defaultReportSTEColor"];
 	// Activity
     case "enabled":
-	return page_settings.settings()["enabledSTEColor"];
+	return page_settings["enabledSTEColor"];
     case "activated":
-	return page_settings.settings()["activatedSTEColor"];
+	return page_settings["activatedSTEColor"];
     case "reporting":
-	return page_settings.settings()["reportingSTEColor"];
+	return page_settings["reportingSTEColor"];
 
     default:
-	return page_settings.settings()["defaultSpecialSTEColor"];
+	return page_settings["defaultSpecialSTEColor"];
 
 	
     }
@@ -640,15 +644,18 @@ function stepFromCache(step_size) {
 }
 
 function updateGraph(updateJson) {
-    // Revert the colors of all previously updated nodes and 
-    //console.log(JSON.stringify(updateJson));
-    var timer = new Date().getTime();
+    // Revert the colors of all previously updated nodes and edges
+    var timer = new Date().getTime(),
+    i,
+    nodesLength = updateJson['nodes'].length,
+    sigmaNodes;
+
     if (!heatMode) {
-	changedGraph.nodes().forEach(function (n) {
-	    sig.graph.nodes(n.id).color = n.originalColor;
+	sig.graph.nodes(changedGraph.nodes).forEach(function (n) {
+	    n.color = n.originalColor;	  
 	});
-	changedGraph.edges().forEach(function (e) {
-	    delete sig.graph.edges(e.id).color;
+	sig.graph.edges(changedGraph.edges).forEach(function (e) {
+	    delete e.color;
 	});
     }
     /*
@@ -658,33 +665,29 @@ function updateGraph(updateJson) {
       node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
       });
       }*/
-    changedGraph.clear();
+    changedGraph = {nodes: [], edges: []};
     
-    var changedNodesArray = updateJson.nodes;
     // Make an array of node IDs from incoming data
-    var changedNodeIDs = [];
-    for (var i = 0; i < changedNodesArray.length; i++)
-	changedNodeIDs[i] = changedNodesArray[i].id;
+    for (i = 0; i < nodesLength; i++)
+	changedGraph.nodes.push(updateJson.nodes[i].id);
     // Get array containing references to actual graph nodes
-    var sigmaNodes = sig.graph.nodes(changedNodeIDs);
+    var sigmaNodes = sig.graph.nodes(changedGraph.nodes);
     // Add these nodes to changedGraph nodes
-    for (var i = 0; i < sigmaNodes.length; i++)
-	changedGraph.addNode(sigmaNodes[i]);
-    for (var i = 0; i < sigmaNodes.length; i++) {
+    for (i = 0; i < nodesLength; i++) {
 	// Update count only if it is higher than before -- no backwards traversal for heat map
-	sigmaNodes[i].count = Math.max(parseInt(changedNodesArray[i].count), sigmaNodes[i].count);
+	sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
 	if (heatMode) 
 	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/(sigmaNodes[i].count+1)) + "," + Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
-	    sigmaNodes[i].color = getColor(changedNodesArray[i].activity);
+	    sigmaNodes[i].color = getColor(updateJson.nodes[i].activity);
 	// If node is activated, light up outgoing edges
-	if (sigmaNodes[i].color == "rgb(0,255,0)" && !heatMode) {
+	if (updateJson.nodes[i].activity == "activated" && !heatMode) {
 	    var outgoingEdges = sig.graph.outEdges(sigmaNodes[i].id),
 	    e;
 	    for (e in outgoingEdges) {
-		outgoingEdges[e].color = "#0f0";
+		outgoingEdges[e].color = page_settings['activatedSTEColor'];
 		try {
-		    changedGraph.addEdge(outgoingEdges[e]);
+		    changedGraph.edges.push(e);
 		} catch (error) {
 		    console.log(error);
 		    console.log(outgoingEdges[e]);
@@ -929,7 +932,7 @@ function toggleEditorMode() {
 	});
 
 	// Set background of the graph container
-	graph_container.style.backgroundColor = "#ffd";
+	graph_container.style.backgroundColor = page_settings['editModeBGColor'];
 
 	// Show Editor Tab and hide Simulation Tools
 	$('#editor-tab').show();
@@ -980,7 +983,7 @@ function toggleEditorMode() {
 	keyboard = sigma.plugins.keyboard(sig, renderer);
 	select.bindKeyboard(keyboard);
 	lasso = new sigma.plugins.lasso(sig, renderer, {
-	    strokeStyle: 'red',
+	    strokeStyle: page_settings['lassoToolStrokeColor'],
 	    fillWhileDrawing: true
 	});
 	select.bindLasso(lasso);
@@ -1000,7 +1003,7 @@ function toggleEditorMode() {
 	editor_mode = false;
 
 	// Revert background color
-	graph_container.style.backgroundColor = "#fff";
+	graph_container.style.backgroundColor = page_settings['stageBGColor'];
 
 	// Reenable collapsable header
 	$('#nav-hide-icon').wrap('<a aria-controls="collapseHeader" \
@@ -1083,6 +1086,7 @@ function addSTE(id, ss, rep_code, start, type) {
 	y: 1,
 	size: nodeSize * nodeScalar,
 	color: getColor(type),
+	originalColor: getColor(type),
 	data: {
 	    ss: ss,
 	    rep_code: rep_code,
