@@ -165,9 +165,6 @@ var graph_container;
 // Called on page load
 function pageLoad() {
 
-    var sheets = document.styleSheets;
-    console.log(sheets);
-
     // Loading the default settings for a sigma instance
     sig_settings = {
 	skipIndexation: true,
@@ -191,8 +188,8 @@ function pageLoad() {
 	edgesPowRatio: 1,
 	sideMargin: 5,
 	borderSize: 2,
-	nodeQuadTreeMaxLevel: 8,
-	edgeQuadTreeMaxLevel: 8,
+	nodeQuadTreeMaxLevel: 6,
+	edgeQuadTreeMaxLevel: 6,
 	// Plugin stuff	
 	mouseEnabled: true,
 	touchEnabled: true,
@@ -423,6 +420,23 @@ function pageLoad() {
 	    // Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
 	    // type: 'webgl'
 	},
+	graph: {
+	    nodes: [
+		{
+		    id: "_temp_placeholder_node_1",
+		    x: 5,
+		    y: -5,
+		    hidden: true
+		},
+		{
+		    id: "_temp_placeholder_node_2",
+		    x: -5,
+		    y: 5,
+		    hidden: true
+		}
+	    ],
+	    edges: []
+	},
 	settings: sig_settings
     });
 
@@ -586,16 +600,16 @@ function loadGraph(json_object){
     
 }
 
-function getColor(type) {
-    switch (type) {
-	// Inactive
+function getColor(data) {
+    switch (data) {
+	// Inactive -- data = 'type' parameter
     case "node":
 	return page_settings["defaultSTEColor"];
     case "start":
 	return page_settings["defaultStartSTEColor"];
     case "report":
 	return page_settings["defaultReportSTEColor"];
-	// Activity
+	// Activity -- data = 'activity' parameter
     case "enabled":
 	return page_settings["enabledSTEColor"];
     case "activated":
@@ -644,12 +658,15 @@ function stepFromCache(step_size) {
 }
 
 function updateGraph(updateJson) {
-    // Revert the colors of all previously updated nodes and edges
+
     var timer = new Date().getTime(),
     i,
     nodesLength = updateJson['nodes'].length,
-    sigmaNodes;
+    sigmaNodes,
+    outEdges,
+    e;
 
+    // Revert the colors of all previously updated nodes and edges
     if (!heatMode) {
 	sig.graph.nodes(changedGraph.nodes).forEach(function (n) {
 	    n.color = n.originalColor;	  
@@ -665,33 +682,29 @@ function updateGraph(updateJson) {
       node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
       });
       }*/
-    changedGraph = {nodes: [], edges: []};
-    
-    // Make an array of node IDs from incoming data
+
+    // This will only store the IDs of all nodes and edges that were updated
+    changedGraph = {nodes: [], edges: []};    
+    // Load changedGraph with node IDs from incoming data
     for (i = 0; i < nodesLength; i++)
 	changedGraph.nodes.push(updateJson.nodes[i].id);
     // Get array containing references to actual graph nodes
-    var sigmaNodes = sig.graph.nodes(changedGraph.nodes);
-    // Add these nodes to changedGraph nodes
+    sigmaNodes = sig.graph.nodes(changedGraph.nodes);
+
+    // Update these nodes
     for (i = 0; i < nodesLength; i++) {
 	// Update count only if it is higher than before -- no backwards traversal for heat map
-	sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
+	// sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
 	if (heatMode) 
 	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/(sigmaNodes[i].count+1)) + "," + Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
 	    sigmaNodes[i].color = getColor(updateJson.nodes[i].activity);
 	// If node is activated, light up outgoing edges
 	if (updateJson.nodes[i].activity == "activated" && !heatMode) {
-	    var outgoingEdges = sig.graph.outEdges(sigmaNodes[i].id),
-	    e;
-	    for (e in outgoingEdges) {
-		outgoingEdges[e].color = page_settings['activatedSTEColor'];
-		try {
-		    changedGraph.edges.push(e);
-		} catch (error) {
-		    console.log(error);
-		    console.log(outgoingEdges[e]);
-		}
+	    outEdges = sig.graph.outEdges(sigmaNodes[i].id);
+	    for (e in outEdges) {
+		outEdges[e].color = page_settings['activatedSTEColor'];
+		changedGraph.edges.push(e);
 	    }
 	}
     }
@@ -708,7 +721,7 @@ function nodeSizeChange(val) {
 	    n.size = nodeSize * nodeScalar;
 	});
     sig.settings('maxNodeSize', nodeSize);
-    sig.settings('zoomMin', nodeSize/80);
+    sig.settings('zoomMin', nodeSize * nodeScalar / 80);
     sig.refresh({skipIndexation: true});
 }
 
@@ -926,11 +939,6 @@ function toggleEditorMode() {
 	// Disable clickability of character stream
 	$('.input-display-table a').contents().unwrap();
 
-	// Set original colors of all nodes
-	sig.graph.nodes().forEach(function(n) {
-	    n.color = n.originalColor;
-	});
-
 	// Set background of the graph container
 	graph_container.style.backgroundColor = page_settings['editModeBGColor'];
 
@@ -953,9 +961,14 @@ function toggleEditorMode() {
 			   angle: cam.angle};
 	nodeScalar = 1.0 / scale;
 	edgeScalar = 1.0 / scale;
+
+	// Set node color and size
 	sig.graph.nodes().forEach(function(n) {
+	    n.color = n.originalColor;
 	    n.size = nodeSize * nodeScalar;
-	    n.hidden = false;
+	    if (n.id == "_temp_placeholder_node_1" || n.id == "_temp_placeholder_node_2");
+	    else 
+		n.hidden = false;
 	});
 	sig.graph.edges().forEach(function(e) {
 	    e.size = edgeSize * edgeScalar;
@@ -969,6 +982,7 @@ function toggleEditorMode() {
 	    type: 'canvas'
 	});
 	sig.cameras[0].goTo(camSettings);
+
 	// Turn off autoRescale because it's annoying when moving nodes
 	sig.settings('autoRescale', false);
 	// Enable edge hovering to allow user to delete connections
@@ -992,9 +1006,9 @@ function toggleEditorMode() {
 
 	// Change tooltip menu to edit features
 	sigma.plugins.killTooltips(sig);
-
 	tooltips = sigma.plugins.tooltips(sig, renderer, tooltip_edit_config);
 	
+	// Refresh the view
 	sig.refresh({skipIndexation: false});
 
     }
@@ -1049,6 +1063,9 @@ onClick="toggleChevron()" class="hide-header-btn"></a>');
 			   ratio: cam.ratio * scale, 
 			   angle: cam.angle};
 
+	nodeScalar = 1;
+	edgeScalar = 1;
+
 	// Switch to WebGL renderer
 	sig.killRenderer(sig.renderers[0]);
 	sig.killCamera(sig.cameras[0]);
@@ -1063,7 +1080,7 @@ onClick="toggleChevron()" class="hide-header-btn"></a>');
 	// Turn edge hovering off
 	sig.settings('enableEdgeHovering', false);
 	// Reset camera angle slider
-	$('#angle-slider').val(0);
+	//$('#angle-slider').val(0);
 
 	sig.refresh();
 
@@ -1095,21 +1112,26 @@ function addSTE(id, ss, rep_code, start, type) {
 	}
     };
     
-    // First STE added in default location
-    if (sig.graph.nodes().length == 0) {
-	// First node is centered, others can be used as reference points in dragNodes
-	// They cannot be on the same axis
+    // First STE added in default location (2 nodes are preloaded, shouldn't matter if otherwise)
+    if (sig.graph.nodes().length <= 2) {
+	// Max out size options when starting out
 	var $nodeSlider = $('#node-slider');
 	$nodeSlider.val($nodeSlider.attr("max"));
 	nodeSizeChange($nodeSlider.val());
+	var $edgeSlider = $('#edge-slider');
+	$edgeSlider.val($edgeSlider.attr("max"));
+	edgeSizeChange($edgeSlider.val());
+
 	newNode.size = nodeSize * nodeScalar;
+
+	// First node is centered, others can be used as reference points in dragNodes
+	// They cannot be on the same axis
 	newNode.x = 0;
 	newNode.y = 0;
-	sig.graph.addNode(newNode);
     }
+
     // Allow user to place this node
-    else
-	dragListener.addNode(newNode);
+    dragListener.addNode(newNode);
     
     sig.refresh();
     

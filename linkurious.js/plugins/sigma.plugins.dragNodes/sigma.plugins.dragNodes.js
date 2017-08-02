@@ -395,17 +395,13 @@
         if (divx === 0) divx = 1; //fix edge case where axis are aligned
 
         var divy = (b.renY - a.renY);
-        if (divy === 0) divy = 1; //fix edge case where axis are aligned
-	  
-	  console.log("divx: " + divx + ", divy: " + divy);
+        if (divy === 0) divy = 1; //fix edge case where axis are aligned	 
 
         x = ((x - a.renX) / divx) * (b.x - a.x) + a.x;
         y = ((y - a.renY) / divy) * (b.y - a.y) + a.y;
-	  console.log("x: " + x + ", y: " + y);
 
         x2 = x * cos - y * sin;
         y2 = y * cos + x * sin;
-	  console.log("x2: " + x2 + ", y2: " + y2);
 
         // Drag multiple nodes, Keep distance
         if(_a) {

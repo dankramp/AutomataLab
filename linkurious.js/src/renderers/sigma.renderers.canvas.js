@@ -256,9 +256,8 @@
       this.camera.getRectangle(this.width, this.height)
     );
 
-    for (a = this.nodesOnScreen, i = 0, l = a.length; i < l; i++)
-      index[a[i].id] = a[i];
-
+      for (a = this.nodesOnScreen, i = 0, l = a.length; i < l; i++)
+	  index[a[i].id] = a[i];
     // Draw edges:
     // - If settings('batchEdgesDrawing') is true, the edges are displayed per
     //   batches. If not, they are drawn in one frame.

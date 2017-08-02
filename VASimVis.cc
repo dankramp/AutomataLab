@@ -121,7 +121,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.configurable.js");
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.graph.js"); // this makes RandomForest fast/slow
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.camera.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.quad.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/classes/sigma.classes.quad.js");
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.edgequad.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.mouse.js");
   Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.touch.js");
@@ -261,11 +261,8 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   simulate->setTextFormat(Wt::XHTMLUnsafeText);
   simulate->setStyleClass("btn btn-primary btn-lg");
   simulate->clicked().connect( std::bind([=] () {
-	if (!automataUploaded) { // No automata file uploaded
-	  error_modal_message->setText("Automata file must first be uploaded before simulation.");
-	  doJavaScript("$('#error-modal').modal('show');");
-	} else if (!validAutomata) { // File uploaded is not valid automata
-	  error_modal_message->setText("Cannot simulate over given automata file. \nPlease upload .mnrl or .anml file to simulate.");
+	if (ap.getElements().size() < 1) { // Automata is empty
+	  error_modal_message->setText("Automata has no elements. Please upload a file or create an automata before simulating.");
 	  doJavaScript("$('#error-modal').modal('show');");
 	} else if (!validInput) { // No input file to simulate on
 	  error_modal_message->setText("Please upload an input file to simulate on.");
@@ -664,27 +661,16 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	    std::string start = (ste_start_select->currentIndex() > 0) ? ("Start Type: " +  ste_start_select->currentText().narrow()) : "";
 	    std::string type = "node";
 
-	    STE *newSTE = new STE(id, ss, ste_start_select->currentText().toUTF8());
-
-	    // Unescape all escaped characters
-	    int start_pos = 0;
-	    while ((start_pos = ss.find(R"(\)", start_pos)) != std::string::npos) {
-	      ss.replace(start_pos, 1, R"(\\)");
-	      start_pos += 2;
-	    }
-
-	    // If reporting
-	    if (rep.length() > 0) {
-	      type = "report";
-	      newSTE->setReporting(true);
-	      newSTE->setReportCode(ste_rep_input->text().toUTF8());
-	    }
 	    // If start
-	    else if (start.length() > 0)
+	    if (start.length() > 0)
 	      type = "start";
+	    // If reporting
+	    else if (rep.length() > 0)
+	      type = "report";
 
 	    if (editingSTE) { // If editing existing STE, update automata reference and graph visual
 	      STE * element = static_cast <STE *>(ap.getElements()[ste_id]);
+
 	      if (ste_start_select->currentText().narrow() == "none") {
 		// If start type is none, remove from the start STEs vector
 		auto starts = ap.getStarts();
@@ -697,20 +683,41 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 		starts.erase(std::remove(starts.begin(), starts.end(), element), starts.end());
 		std::cout << "Removed start STE" << std::endl;
 	      }
+	      
+	      // Set all of the element's parameters
 	      element->setId(id);
 	      element->setReporting(rep.length() > 0);
 	      element->setReportCode(ste_rep_input->text().toUTF8());
 	      element->setSymbolSet(ss);
 	      element->setStart(ste_start_select->currentText().narrow());
 
+	      // Unescape all escaped characters in the symbol set for Javascript
+	      int start_pos = 0;
+	      while ((start_pos = ss.find(R"(\)", start_pos)) != std::string::npos) {
+		ss.replace(start_pos, 1, R"(\\)");
+		start_pos += 2;
+	      }	      
+
+	      // Send data to update Javascript
 	      doJavaScript("updateSTEData('" + id + "','" + ss + "','" + start + "','" + rep + "','" + type + "')");
-	      ste_options_title->setText("<h3 class='modal-title'>Create STE</h3>");
-	      ste_options_create_btn->setText("Create STE"); 
-	      editingSTE = false;
 	    }
 	    else {// Add the STE to the automata and the node to the graph
+
+	      STE *newSTE = new STE(id, ss, ste_start_select->currentText().toUTF8());
+	      if (type == "report") {
+		newSTE->setReporting(true);
+		newSTE->setReportCode(ste_rep_input->text().toUTF8());
+	      }	  
 	      ap.rawAddSTE(newSTE);
-	      std::cout << "addSTE('" << id << "','" << ss << "','" << rep << "','" << start << "','" << type << "')" << std::endl;
+
+	      // Unescape all escaped characters in the symbol set for Javascript
+	      int start_pos = 0;
+	      while ((start_pos = ss.find(R"(\)", start_pos)) != std::string::npos) {
+		ss.replace(start_pos, 1, R"(\\)");
+		start_pos += 2;
+	      }	      
+
+	      // Send data to update Javascript
 	      doJavaScript("addSTE('" + id + "','" + ss + "','" + rep + "','" + start + "','" + type + "')");
 	    }
 
@@ -723,6 +730,9 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	    ste_start_select->setCurrentIndex(0);
 	    reporting_check->setCheckState(Wt::CheckState::Unchecked);	 
 	    ste_error_msg->hide();
+	    ste_options_title->setText("<h3 class='modal-title'>Create STE</h3>");
+	    ste_options_create_btn->setText("Create STE"); 
+	    editingSTE = false;
 	  }
 	}
 	else {
