@@ -1,7 +1,16 @@
 'use strict';
 
-// Return an array of all descendents from node with id 'nodeId'
-// Modified function from Sigma.js
+// *********************** //
+// *** SIGMA FUNCTIONS *** //
+// *********************** //
+
+/** 
+ * Finds all descendants of a given node
+ * Modified function from Sigma.js
+ * @param {string} nodeId - the string ID of the parent node
+ * @param {Object} connectedNodes - the array containing the references of nodes added recursively
+ * @returns {array} all nodes that are descendants of the parent node
+ */
 sigma.classes.graph.addMethod('children', function(nodeId, connectedNodes) {
 
     var k,
@@ -16,9 +25,12 @@ sigma.classes.graph.addMethod('children', function(nodeId, connectedNodes) {
 
 });
 
-// Return an array of all edges going out from a node with id 'nodeId'
-// For use in activating edges
-// Modified graph neighbor function from Sigma.js
+/**
+ * Finds all outgoing edges of a given node
+ * Modified graph neighbor function from Sigma.js
+ * @param {string} nodeId - the ID of the parent node
+ * @returns {Object} all outgoing edges from parent node
+*/
 sigma.classes.graph.addMethod('outEdges', function(nodeId) {
     var k,
     e,
@@ -33,12 +45,17 @@ sigma.classes.graph.addMethod('outEdges', function(nodeId) {
     return outgoingEdges;
 });
 
-// This function changes the basic data of a node
-// Creates a new node with the new data, then all connected
-// edges are moved to the new node before the old one is deleted
+/**
+ * Changes basic data of a node
+ * If the node's ID has changed, creates a new node
+ * then connects all edges to new node before deleting old one
+ * @param {string} nodeId - the ID of the node being changed
+ * @param {Object} data - the object containing the new id, symbol set, report code, start type, and type
+ */
 sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
-
+    // Find reference to the original node
     var node = sig.graph.nodes(nodeId),
+    // Construct a new node object
     newNode = {
 	id: data.id,
 	data: {
@@ -48,6 +65,7 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 	    type: data.type
 	},
 	color: getColor(data.type),
+	originalColor: getColor(data.type),
 	x: node.x,
 	y: node.y,
 	size: node.size
@@ -57,7 +75,9 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
     k,
     e;
 
-    if (nodeId == data.id) {
+    automataChanged = true;
+
+    if (nodeId == data.id) { // Node ID hasn't changed; update data
 	node.data = newNode.data;
 	node.color = newNode.color;
 	return;
@@ -73,11 +93,12 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 	for (e in in_index[k]) {
 	    // Remove edge and add new one to newNode
 	    sig.graph.dropEdge(e);
+
 	    sig.graph.addEdge({
 		id: e,
 		source: k,
 		target: newNode.id,
-		size: edgeSize
+		size: edgeSize * elemScalar
 	    });
 	}
     // For all nodes with edges pointing from newNode
@@ -89,20 +110,24 @@ sigma.classes.graph.addMethod('changeData', function(nodeId, data) {
 		id: e,
 		source: newNode.id,
 		target: k,
-		size: edgeSize
+		size: edgeSize * elemScalar
 	    });
 	}
 
     sig.graph.dropNode(nodeId);
     
-    sig.refresh({skipIndexation: true});
+    sig.refresh({skipIndexation: false});
 });
 
-// Simple function to convert a string to a number
-function toInt(n){ return Math.round(Number(n)); };
+// ************************ //
+// *** GLOBAL VARIABLES *** //
+// ************************ //
 
-// Default page settings
+// Default settings
 var page_settings = new Settings().settings();
+var sig_settings;
+var tooltip_def_config;
+var tooltip_edit_config;
 
 // Sigma variables
 var sig = new sigma();
@@ -117,10 +142,8 @@ var keyboard;
 var lasso;
 var rectSelect;
 var editNodeId;
-var sig_settings;
-var tooltip_def_config;
-var tooltip_edit_config;
 var bounds;
+var automataChanged = false;
 
 // Graph settings variable defaults
 var heatMode = false;
@@ -130,8 +153,7 @@ var edgeSize = .1;
 var graphWidth = 12;
 var graphHeight = 10;
 var editor_mode = false;
-var nodeScalar = 1;
-var edgeScalar = 1;
+var elemScalar = 1;
 var deleteEdgeMode = false;
 var del_index = 0;
 var del_id = "";
@@ -148,8 +170,9 @@ var input_length = 0;
 var stopSimOnReport = false;
 var reportRecord = "";
 var textFile = null;
+var stopSimOnCycle = -1;
 
-// DOM elements
+// JQuery DOM elements
 var $download_rep_btn; 
 var $play_sim_btn;
 var $sim_step_btn;
@@ -158,15 +181,150 @@ var $hidden_play_btn;
 var $input_display_container;
 var $table;
 
+// Other DOM elements
 var body;
 var graph_container;
 
 
-// Called on page load
+// ************************ //
+// *** HELPER FUNCTIONS *** //
+// ************************ //
+
+/**
+ * Appends the argument to the end of the current page URL
+ * @param {string} opt - the opt code to be appended to the URL
+ */
+function appendOptimizations(opt) {
+    if (~window.location.href.indexOf("?a=")) {
+	var path = window.location.href.substring(window.location.href.indexOf("?a="));
+	window.history.pushState({}, 'Title', path + opt);
+    }
+}
+
+/**
+ * Saves a file to the user's computer
+ * @param {string} fn - the name of the file to be saved
+ * @param {string} data - the contents of the file to be saved
+*/
+function exportFile(fn, data) {
+    var blob = new Blob([data], {type: "text/plain"});
+    saveAs(blob, fn);
+}
+
+/**
+ * Gets the corresponding color based on the input data type
+ * @param {string} data - the 'type' or 'activity' parameter of a node
+ * @returns {string} the corresponding color code as listed in global settings
+ */
+function getColor(data) {
+    switch (data) {
+	// Inactive -- data = 'type' parameter
+    case "node":
+	return page_settings["defaultSTEColor"];
+    case "start":
+	return page_settings["defaultStartSTEColor"];
+    case "report":
+	return page_settings["defaultReportSTEColor"];
+	// Activity -- data = 'activity' parameter
+    case "enabled":
+	return page_settings["enabledSTEColor"];
+    case "activated":
+	return page_settings["activatedSTEColor"];
+    case "reporting":
+	return page_settings["reportingSTEColor"];
+    default:
+	return page_settings["defaultSpecialSTEColor"];
+    }
+}
+
+/**
+ * Changes the simulation index when the character stream is clicked
+ * @param {Number} index - the index to switch to
+ */
+function indexClick(index) {
+    // Disable/enable sim buttons
+    if (index == cache_index) { // end of cache; disable moving forward 
+	$sim_step_btn.prop("disabled", true);
+	$play_sim_btn.prop("disabled", true);
+    }
+    else { // otherwise enable
+	$sim_step_btn.prop("disabled", false);
+	$play_sim_btn.prop("disabled", false);
+    }
+    if (index == cache_index - cache_length + 1) // beginning of cache; disable moving back
+	$sim_rev_btn.prop("disabled", true);
+    else // otherwise enable
+	$sim_rev_btn.prop("disabled", false);
+
+    stepFromCache(index - simIndex);
+}
+
+/**
+ * Loads the sigma instance with a new graph and applies default settings
+ * @param {Object} json_object - the data structure containing the graph data
+ */
+function loadGraph(json_object){
+
+    // Set all sliders back to their default
+    $('#node-slider').val(page_settings['defaultNodeSize']);
+    $('#edge-slider').val(page_settings['defaultEdgeSize']);
+    $('#width-slider').val(page_settings['defaultWidthRatio']);
+    $('#angle-slider').val(0);
+
+    nodeSizeChange(page_settings['defaultNodeSize']);    
+    edgeSizeChange(page_settings['defaultEdgeSize']);
+    widthChange(page_settings['defaultWidthRatio']);
+    rotationChange(0);
+    
+    $download_rep_btn.hide();
+
+    sig.graph.clear();
+    sig.refresh();
+
+    sig.graph.read(json_object);
+
+    // Set sizes and save color of nodes
+    sig.graph.nodes().forEach(function(n) {
+	n.size = elemScalar * nodeSize;
+	n.color = getColor(n.data.type);
+	n.originalColor = n.color;
+	n.x = n.x * Math.pow(1.1, graphWidth);
+	n.y = ~~n.y;
+	n.count = 0;
+	if (heatMode)
+	    n.color = "rgb(0,0,0)";
+    });
+    
+    // Set size of edges
+    sig.graph.edges().forEach(function(e) {
+	e.size = elemScalar * edgeSize;
+    });
+
+    sig.refresh();
+    $('#loading-graph-modal').modal('hide');
+}
+
+/**
+ * Called on page load, initializes DOM references and settings
+ * Adds actions listeners to all input objects
+ * Initializes Sigma instance with invisible nodes
+ */
 function pageLoad() {
+
+    // Set all sliders to their default value
+    $('#node-slider').val(page_settings['defaultNodeSize']);
+    $('#edge-slider').val(page_settings['defaultEdgeSize']);
+    $('#width-slider').val(page_settings['defaultWidthRatio']);
+
+    nodeSizeChange(page_settings['defaultNodeSize']);    
+    edgeSizeChange(page_settings['defaultEdgeSize']);
+    widthChange(page_settings['defaultWidthRatio']);
+
+    $('#stop-cycle-input').hide();
 
     // Loading the default settings for a sigma instance
     sig_settings = {
+	autoRescale: ['nodePosition'],
 	skipIndexation: true,
 	hideEdgesOnMove: true,
 	zoomMin: .00001,
@@ -277,8 +435,6 @@ function pageLoad() {
 	}
     };
 
-
-
     // Initialize DOM element references
     $download_rep_btn = $('#dl-rep-btn');
     $play_sim_btn = $('#play-sim-btn');
@@ -293,7 +449,9 @@ function pageLoad() {
     // Set graph container height to fit between header and footer
     graph_container = document.getElementById("graph-container");
     graph_container.style.top = document.getElementById("click-collapse-bar").offsetHeight + "px";
-    graph_container.style.height = "calc(100% - " + document.getElementsByClassName("footer")[0].offsetHeight + "px - " + document.getElementById("click-collapse-bar").offsetHeight + "px)";
+    graph_container.style.height = "calc(100% - " + 
+	document.getElementsByClassName("footer")[0].offsetHeight + 
+	"px - " + document.getElementById("click-collapse-bar").offsetHeight + "px)";
     graph_container.style.background = page_settings['stageBGColor'];
     
     /* INPUT LISTENERS */
@@ -347,6 +505,31 @@ function pageLoad() {
 	stopSimOnReport = document.getElementById('instop-sim-report-box').checked;
     });
 
+    // Combo Boxes
+    $('#stop-combo').change(function() {
+	if (this.value == "2") { // 'cycle' is selected
+	    $('#stop-cycle-input').show();
+	    stopSimOnReport = false;
+	}
+	else if (this.value == "1") { // 'report' is selected
+	    $('#stop-cycle-input').hide();
+	    stopSimOnReport = true;
+	    stopSimOnCycle = -1;
+	    $('#stop-cycle-input').val("");
+	}
+	else { // 'none' is selected
+	    $('#stop-cycle-input').hide();
+	    stopSimOnReport = false;
+	    stopSimOnCycle = -1;
+	    $('#stop-cycle-input').val("");
+	}
+    });
+
+    // Text Input
+    $('#stop-cycle-input').change(function() {
+	stopSimOnCycle = +(this.value);
+    });
+
     // Buttons
     $('#reset-camera-btn').click(function() {
 	resetCamera();
@@ -356,6 +539,9 @@ function pageLoad() {
     });
     $('#toggle-rect-btn').click(function() {
 	toggleRect();
+    });
+    $('#save-graph-btn').click(function() {
+	saveGraphData();
     });
     $sim_step_btn.click(function() {
 	stepFromCache(1).then(function(response) {
@@ -417,22 +603,21 @@ function pageLoad() {
     sig = new sigma({
 	renderer: {
 	    container: document.getElementById('graph-container')
-	    // Allows for alpha channel and self-loops; uses WebGL if possible, canvas otherwise
 	    // type: 'webgl'
 	},
 	graph: {
 	    nodes: [
 		{
 		    id: "_temp_placeholder_node_1",
-		    x: 5,
-		    y: -5,
-		    hidden: true
+		    x: 100,
+		    y: -100,
+		    invisible: true
 		},
 		{
 		    id: "_temp_placeholder_node_2",
-		    x: -5,
-		    y: 5,
-		    hidden: true
+		    x: -100,
+		    y: 100,
+		    invisible: true
 		}
 	    ],
 	    edges: []
@@ -446,11 +631,27 @@ function pageLoad() {
 
     sig.bind('clickStage', function() {tooltips.close()});
 
-    sig.refresh();
-    
+    sig.refresh({skipIndexation: false});
 }
 
+/**
+ * Sets the value of 'input_length'
+ * @param {Number} length - the value to set 'input_length' to
+ */
+function setInputLength(length) {
+    input_length = length;
+}
+
+// **************************** //
+// *** SIMULATION FUNCTIONS *** //
+// **************************** //
+
+/**
+ * Resets all simulation settings
+ */
 function resetSimulation() {
+    $table.find('tr').find('td').removeClass("highlight");
+    $table.find('tr').find('td').removeClass("report");
     simIndex = 0;
     cache_length = 0;
     cache_index = -1;
@@ -464,18 +665,17 @@ function resetSimulation() {
     textFile = null;
     $table = $('#input-table');
     $('#angle-slider').val(0);
-    graph_container.style.height = "calc(100% - " + document.getElementsByClassName("footer")[0].offsetHeight + "px - " + document.getElementById("click-collapse-bar").offsetHeight + "px)";
+    graph_container.style.height = "calc(100% - " + 
+	document.getElementsByClassName("footer")[0].offsetHeight + 
+	"px - " + document.getElementById("click-collapse-bar").offsetHeight + 
+	"px)";
 }
 
-function setInputLength(length) {
-    input_length = length;
-}
-
-function exportFile(fn, data) {
-    var blob = new Blob([data], {type: "text/plain"});
-    saveAs(blob, fn);
-}
-
+/**
+ * Loads all new cached graphs, adjusts indexes, sets new clickable range
+ * @param {Number} index - the new max index of cached graphs
+ * @param {Object} json_object - the JSON object containing all cached graph data
+ */
 function setCachedGraphs(index, json_object) {
     var prevIndex = cache_index,
     i,
@@ -527,7 +727,9 @@ function setCachedGraphs(index, json_object) {
 	}	
     }
     
-    $download_rep_btn.attr({onClick: 'exportFile("reports.txt", reportRecord)'});
+    $download_rep_btn.click(function() {
+	exportFile("reports.txt", reportRecord);
+    });
     
     // Enable forward sim buttons
     if (!playSim)
@@ -536,94 +738,11 @@ function setCachedGraphs(index, json_object) {
 
 }
 
-function indexClick(index) {
-    
-    // Disable/enable sim buttons
-    if (index == cache_index) { // end of cache; disable moving forward 
-	$sim_step_btn.prop("disabled", true);
-	$play_sim_btn.prop("disabled", true);
-    }
-    else { // otherwise enable
-	$sim_step_btn.prop("disabled", false);
-	$play_sim_btn.prop("disabled", false);
-    }
-    if (index == cache_index - cache_length + 1) // beginning of cache; disable moving back
-	$sim_rev_btn.prop("disabled", true);
-    else // otherwise enable
-	$sim_rev_btn.prop("disabled", false);
-
-    stepFromCache(index - simIndex);
-
-}
-
-function loadGraph(json_object){
-
-    nodeSizeChange($('#node-slider').val());    
-    edgeSizeChange($('#edge-slider').val());
-    widthChange($('#width-slider').val());
-     
-    $download_rep_btn.hide();
-
-    try {
-	sig.graph.clear();
-	sig.refresh();
-    } catch (e) {
-	console.log("Error clearing graph: " + e.message);
-    }
-    try {
-	sig.cameras[0].goTo({angle: 0});
-	sig.graph.read(json_object);
-	
-	// Set sizes and save color of nodes
-
-	sig.graph.nodes().forEach(function(n) {
-	    n.size = 1;
-	    n.color = getColor(n.data.type);
-	    n.originalColor = n.color;
-	    n.x = n.x * Math.pow(1.1, graphWidth) + 1;
-	    n.y = ~~n.y;
-	    n.count = 0;
-	    if (heatMode)
-		n.color = "rgb(0,0,0)";
-	});
-	
-	sig.graph.edges().forEach(function(e) {
-	    e.size = 1;
-	});
-
-	sig.refresh();
-	$('#loading-graph-modal').modal('hide');
-    } catch (err) {
-	$('#loading-graph-modal').modal('hide');
-	alert(err.message);
-    }
-    
-}
-
-function getColor(data) {
-    switch (data) {
-	// Inactive -- data = 'type' parameter
-    case "node":
-	return page_settings["defaultSTEColor"];
-    case "start":
-	return page_settings["defaultStartSTEColor"];
-    case "report":
-	return page_settings["defaultReportSTEColor"];
-	// Activity -- data = 'activity' parameter
-    case "enabled":
-	return page_settings["enabledSTEColor"];
-    case "activated":
-	return page_settings["activatedSTEColor"];
-    case "reporting":
-	return page_settings["reportingSTEColor"];
-
-    default:
-	return page_settings["defaultSpecialSTEColor"];
-
-	
-    }
-}
-
+/**
+ * Attempts to load a cached graph
+ * @param {Number} step_size - the relative size of the step in the cache
+ * @returns {Promise} resolves if successful or new cache is being fetched; rejected otherwise
+ */
 function stepFromCache(step_size) {
     return new Promise(function(resolve, reject) {
 	var relativeIndex = simIndex + cache_length - cache_index - 1 + step_size;
@@ -644,8 +763,11 @@ function stepFromCache(step_size) {
 	$table.find('tr').find('td:eq(' + simIndex + ')').addClass("highlight");
 	updateGraph(cachedGraphs[0][relativeIndex]);
 
+	// To stop simulation or to continue it
 	if (stopSimOnReport && cachedGraphs[0][relativeIndex]["rep_nodes"].length > 0)
 	    reject("stop on report");
+	else if (stopSimOnCycle == simIndex)
+	    reject("stop on cycle");
 	else	    
 	    resolve("Loaded graph");
 
@@ -657,6 +779,43 @@ function stepFromCache(step_size) {
     });
 }
 
+/**
+ * Opens the 'Create STE' modal
+ */
+function triggerAddSTE() {
+    tooltips.close();
+    $('#add-ste-modal').modal('show');
+}
+
+/**
+ * Sends data to C++ to load 'Update STE' modal with
+ * @param {String} nodeId - the ID of the node to be edited
+ */
+function triggerChangeData(nodeId) {
+    tooltips.close();
+    var node = sig.graph.nodes(nodeId),
+    start = (node.data.start) ? node.data.start.substring(12) : "none",
+    rep = (node.data.rep_code) ? node.data.rep_code.substring(13) : "";
+    editNodeId = nodeId;
+
+    Wt.emit(Wt, "changeSTEData", node.id, node.data.ss, start, rep);
+}
+
+/**
+ * Triggers deleting an STE from the automata
+ * @param {String} nodeId - the ID of the node to be deleted
+ */
+function triggerDeleteSTE(nodeId) {
+    tooltips.close();
+    $('#delete-ste-modal').modal('show');
+    Wt.emit(Wt, "deleteSTE", nodeId);
+}
+
+/**
+ * Updates graph colors to reflect automata state
+ * Logs the time it takes to update the graph to the console
+ * @param {Object} updateJson - the data of updated activity types
+ */
 function updateGraph(updateJson) {
 
     var timer = new Date().getTime(),
@@ -696,7 +855,9 @@ function updateGraph(updateJson) {
 	// Update count only if it is higher than before -- no backwards traversal for heat map
 	// sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
 	if (heatMode) 
-	    sigmaNodes[i].color = "rgb(" + toInt(255 - 255/(sigmaNodes[i].count+1)) + "," + Math.min(sigmaNodes[i].count, 255) + ",0)";
+	    sigmaNodes[i].color = "rgb(" + 
+	    +(255 - 255/(sigmaNodes[i].count+1)) + "," + 
+	    Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
 	    sigmaNodes[i].color = getColor(updateJson.nodes[i].activity);
 	// If node is activated, light up outgoing edges
@@ -712,82 +873,49 @@ function updateGraph(updateJson) {
     console.log("update graph timer: " + (new Date().getTime() - timer));
 }
 
-// Graph manipulation controls
 
-function nodeSizeChange(val) {
-    nodeSize = .1 * Math.pow(1.1, val);
-    if (editor_mode)
-	sig.graph.nodes().forEach(function (n) {
-	    n.size = nodeSize * nodeScalar;
-	});
-    sig.settings('maxNodeSize', nodeSize);
-    sig.settings('zoomMin', nodeSize * nodeScalar / 80);
-    sig.refresh({skipIndexation: true});
-}
+// ************************************ //
+// *** GRAPH MANIPULATION FUNCTIONS *** //
+// ************************************ //
 
+/**
+ * Changes the size of all edges on screen with geometric equation
+ * @param {Number} val - the value from the edge slider
+ */
 function edgeSizeChange(val) {
-    edgeSize = .005 * Math.pow(1.2, val);
-    if (editor_mode)
+    edgeSize = .005 * Math.pow(1.2, val);   
+    // if (editor_mode)
 	sig.graph.edges().forEach(function (e) {
-	    e.size = edgeSize * edgeScalar;
+	    e.size = edgeSize * elemScalar;
 	});
     sig.settings('maxEdgeSize', edgeSize);
     sig.refresh({skipIndexation: true});
 }
 
-function widthChange(val) {
-    var ratio = Math.pow(1.1, val - graphWidth);
-    sig.graph.nodes().forEach(function (n) {
-	n.x *= ratio;
-    });
-    graphWidth = val;
-    sig.refresh({skipIndexation: true});
-}
-
-function rotationChange(val) {
-    sig.cameras[0].goTo({angle: -1 * Math.PI / 180 * +val});
-    sig.refresh({skipIndexation: true});
-}
-
-function toggleEdges() {
-    sig.settings("drawEdges", $('#inrender-edge-box').is(':checked'));
-    $('#edge-slider').toggle('disabled');
-    draw_edges ^= true;
-    sig.refresh({skipIndexation: true});
-}
-
-function toggleHeatMap() {
-    if ($('#inheat-mode-box').is(':checked')) {
-	heatMode = true;
+/**
+ * Changes the size of all nodes on screen with geometric equation
+ * @param {Number} val - the value from the node slider
+ */
+function nodeSizeChange(val) {
+    nodeSize = .1 * Math.pow(1.1, val);
+    //if (editor_mode)
 	sig.graph.nodes().forEach(function (n) {
-	    n.color = "rgb(" + toInt(255 - 255/(n.count+1)) + "," + Math.min(n.count, 255) + ",0)";
-	    //console.log(n.color);
+	    n.size = nodeSize * elemScalar;
 	});
-	sig.graph.edges().forEach(function (e) {
-	    delete e.color;
-	});
-    }
-    else {
-	heatMode = false;
-	sig.graph.nodes().forEach(function (n) {
-	    n.color = n.originalColor;
-	});
-    }
-
+    sig.settings('maxNodeSize', nodeSize);
+    sig.settings('zoomMin', nodeSize / 80 * elemScalar);
     sig.refresh({skipIndexation: true});
 }
 
-function openSearchBar() {
-    tooltips.close();
-    $('#search-modal').modal('show');
-}
-
+/**
+ * Resets the camera and autoscales if necessary
+ */
 function resetCamera() {
     tooltips.close();
     var camPos = {ratio: 1, x: 0, y: 0, angle: 0},
     cam = sig.cameras[0];
     if (!sig.settings("autoRescale")) {
-	bounds = sigma.utils.getBoundaries(sig.graph, "", true);
+	bounds = sigma.utils.getBoundaries(sig.graph, "", true, true);
 	var minX = (bounds.minX == "Infinity") ? -1 : bounds.minX,
 	minY = (bounds.minY == "Infinity") ? -1 : bounds.minY,
 	maxX = (bounds.maxX == "-Infinity") ? 1 : bounds.maxX,
@@ -805,7 +933,6 @@ function resetCamera() {
 		  y: (maxY + minY) / 2, 
 		  ratio: 1 / scale, 
 		  angle: 0};
-
     }
     sigma.misc.animation.camera(
 	cam,
@@ -815,102 +942,207 @@ function resetCamera() {
     $('#angle-slider').val(0);
 }
 
-function toggleChildren(nodeId) {
-    tooltips.close();
-    toKeep = sig.graph.children(nodeId, {});
-
-    var hidden = true,
-    k;
-    // If any are visible, hide all; else show all
-    for (k in toKeep)
-	if (!toKeep[k].hidden && k != nodeId) {
-	    hidden = false;
-	    break;
-	}
- 
-    sig.graph.nodes().forEach(function(n) {
-	if (toKeep[n.id] && nodeId !=  n.id)
-	    n.hidden = !hidden;
-    });
-
-    sig.refresh({skipIndexation: true});
-
-}
-
-function soloChildren(nodeId) {
-    tooltips.close();
-    var toKeep = sig.graph.children(nodeId, {});
-    toKeep[nodeId] = sig.graph.nodes(nodeId);
- 
-    sig.graph.nodes().forEach(function(n) {
-	if (toKeep[n.id])
-	    n.hidden = false;
-	else
-	    n.hidden = true;
-    });
-
-    sig.refresh({skipIndexation: true});
-
-}
-
-function showAllNodes() {
-    tooltips.close();
-    sig.graph.nodes().forEach(function(n) {
-	n.hidden = false;
-    });
-
+/**
+ * Rotates the camera to the number of degrees input
+ * @param {Number} val - the angle to which the camera is rotated
+ */
+function rotationChange(val) {
+    sig.cameras[0].goTo({angle: -1 * Math.PI / 180 * +val});
     sig.refresh({skipIndexation: true});
 }
 
-function toggleLasso() {
-    if (lasso.isActive) 
-	lasso.deactivate();
-    else
-	lasso.activate();
-}
-
-function toggleRect() {
-    if (rectSelect.isActive) 
-	rectSelect.stop();
-    else
-	rectSelect.start();
-}
-
-function searchById() {
-
-    var bar = document.getElementById("search-bar");
-    locate_plugin.nodes(bar.value);
-    bar.value = "";
-    
+/**
+ * Hides or shows edges based on 'Render Edge' check state
+ */
+function toggleEdges() {
+    sig.settings("drawEdges", $('#inrender-edge-box').is(':checked'));
+    $('#edge-slider').toggle('disabled');
+    draw_edges ^= true;
     sig.refresh({skipIndexation: true});
-    
 }
 
-function printNodeData(nodeId) {
-    tooltips.close();
-    /* DON'T REMOVE THIS */ console.log(sig.graph.nodes(nodeId));
-}
-
-function printAllNodeData() {
-    tooltips.close();
-    sig.graph.nodes().forEach(function(n) {
-	/* DON'T REMOVE THIS */ console.log(n);
-    });
-}
-
-function appendOptimizations(opt) {
-    if (~window.location.href.indexOf("?a=")) {
-	var path = window.location.href.substring(window.location.href.indexOf("?a="));
-	window.history.pushState({}, 'Title', path + opt);
+/**
+ * Toggles heat map mode
+ */
+function toggleHeatMap() {
+    if ($('#inheat-mode-box').is(':checked')) {
+	heatMode = true;
+	sig.graph.nodes().forEach(function (n) {
+	    n.color = "rgb(" + +(255 - 255/(n.count+1)) + "," + Math.min(n.count, 255) + ",0)";
+	});
+	sig.graph.edges().forEach(function (e) {
+	    delete e.color;
+	});
     }
+    else {
+	heatMode = false;
+	sig.graph.nodes().forEach(function (n) {
+	    n.color = n.originalColor;
+	});
+    }
+
+    sig.refresh({skipIndexation: true});
 }
 
+/**
+ * Changes the width ratio of the graph geometrically by scaling
+ * the x coordinate of all nodes
+ * @param {Number} val - the value from the width ratio slider
+ */
+function widthChange(val) {
+    var ratio = Math.pow(1.1, val - graphWidth);
+    sig.graph.nodes().forEach(function (n) {
+	n.x *= ratio;
+    });
+    graphWidth = val;
+    sig.refresh({skipIndexation: true});
+}
+
+
+// ***************************** //
+// *** EDITOR MODE FUNCTIONS *** //
+// ***************************** //
+
+
+/**
+ * Adds a new edge to the graph where the user clicks next
+ * If the user doesn't click a node, the edge is deleted
+ * @param {String} sourceId - the ID of the source node of the edge
+ */
+function addEdge(sourceId) {
+    tooltips.close();
+    
+    dragListener.addEdge(sourceId, edgeSize * elemScalar);
+    select.addEdge(sourceId, edgeSize * elemScalar);
+
+    automataChanged = true;
+}
+
+/**
+ * Adds a new node to the graph where the user clicks next
+ */
+function addSTE(id, ss, rep_code, start, type) {
+    $('#add-ste-modal').modal('hide');
+
+    var newNode = {
+	id: id,
+	x: 1,
+	y: 1,
+	size: nodeSize * elemScalar,
+	color: getColor(type),
+	originalColor: getColor(type),
+	data: {
+	    ss: ss,
+	    rep_code: rep_code,
+	    start: start,
+	    type: type
+	}
+    };
+    
+    // First STE added in default location
+    if (sig.graph.visibleNodes().length == 0) {
+	// Max out size options when starting out
+	var $nodeSlider = $('#node-slider');
+	$nodeSlider.val($nodeSlider.attr("max"));
+	nodeSizeChange($nodeSlider.val());
+	var $edgeSlider = $('#edge-slider');
+	$edgeSlider.val($edgeSlider.attr("max"));
+	edgeSizeChange($edgeSlider.val());
+
+	newNode.size = nodeSize * elemScalar;
+
+	// First node is centered, others can be used as reference points in dragNodes
+	// They cannot be on the same axis
+	newNode.x = 0;
+	newNode.y = 0;
+    }
+
+    // Allow user to place this node
+    dragListener.addNode(newNode);
+
+    automataChanged = true;
+    
+    sig.refresh({skipIndexation: false});    
+}
+
+/**
+ * Deletes a node from the graph
+ * @param {String} nodeId - the ID of the node to be deleted
+ */
+function deleteSTE(nodeId) {
+    $('#delete-ste-modal').modal('hide');    
+    sig.graph.dropNode(nodeId);
+    automataChanged = true;
+    sig.refresh({skipIndexation: false});
+}
+
+/**
+ * Removes an edge from the graph and the automata
+ * @param {String} edgeId - the ID of the edge to be deleted
+ */
+function removeEdge(edgeId) {
+    tooltips.close();
+
+    var edge = sig.graph.edges(edgeId);
+    sig.graph.dropEdge(edgeId);
+    Wt.emit(Wt, "toggleConnection", edge.source, edge.target, false);
+    automataChanged = true;
+    sig.refresh({skipIndexation: false});
+}
+
+/**
+ * Converts the graph data to a string and saves it to a file
+ */
+function saveGraphData() {
+    var nodes = [],
+    edges = [],
+    graph = {};
+    sig.graph.visibleNodes().forEach(function (n) {
+	nodes.push({
+	    id: n.id,
+	    data: n.data,
+	    x: n.x / Math.pow(1.1, graphWidth),
+	    y: n.y
+	});
+    });
+    sig.graph.edges().forEach(function (e) {
+	edges.push({
+	    id: e.id,
+	    source: e.source,
+	    target: e.target
+	});
+    });
+
+    graph['nodes'] = nodes;
+    graph['edges'] = edges;
+
+    exportFile('graph_data.json', JSON.stringify(graph));
+}
+
+/**
+ * Selects the nodes at either ends of the edge
+ * @param {String} edgeId - the ID of the edge
+ */
+function selectConnectedNodes(edgeId) {
+    tooltips.close();
+
+    var edge = sig.graph.edges(edgeId);
+    activeState.addNodes([edge.source, edge.target]);
+    sig.refresh({skipIndexation: true});
+}
+
+/** 
+ * Enters into or exits Editor Mode
+ * Scales graph appropriately for seamless transitioning
+ * Disables simulation tools and steps
+ * Instantiates or disables editor plugins
+ */
 function toggleEditorMode() {
     tooltips.close();
     // For correctly scaling/positioning the camera when switching between modes
     // This code is tweaked from sigma.middlewares.rescale and 
     // emulates the autoscale functionality when switching to editor mode
-    bounds = sigma.utils.getBoundaries(sig.graph, "", true);
+    bounds = sigma.utils.getBoundaries(sig.graph, "", true, true);
     var cam = sig.cameras[0],
     // The changes to min and max allow for editor mode to be started with an empty graph
     minX = (bounds.minX == "Infinity") ? -1 : bounds.minX,
@@ -959,19 +1191,19 @@ function toggleEditorMode() {
 			   y: +cam.y / scale + (maxY + minY) / 2, 
 			   ratio: cam.ratio / scale, 
 			   angle: cam.angle};
-	nodeScalar = 1.0 / scale;
-	edgeScalar = 1.0 / scale;
+	
+	elemScalar = 1.0 / scale;
 
 	// Set node color and size
 	sig.graph.nodes().forEach(function(n) {
 	    n.color = n.originalColor;
-	    n.size = nodeSize * nodeScalar;
-	    if (n.id == "_temp_placeholder_node_1" || n.id == "_temp_placeholder_node_2");
-	    else 
-		n.hidden = false;
+	    n.size = nodeSize * elemScalar;
+	    n.hidden = false;
 	});
+	
 	sig.graph.edges().forEach(function(e) {
-	    e.size = edgeSize * edgeScalar;
+	    e.size = edgeSize * elemScalar;
+	    delete e.color;
 	});
 	
 	// Switch to Canvas renderer
@@ -988,7 +1220,6 @@ function toggleEditorMode() {
 	// Enable edge hovering to allow user to delete connections
 	sig.settings('enableEdgeHovering', true);
 
-
 	// Instantiate plug-ins
 	var renderer = sig.renderers[0];
 	activeState = sigma.plugins.activeState(sig);
@@ -996,12 +1227,12 @@ function toggleEditorMode() {
 	select = sigma.plugins.select(sig, activeState, renderer);
 	keyboard = sigma.plugins.keyboard(sig, renderer);
 	select.bindKeyboard(keyboard);
+	rectSelect = new sigma.plugins.rectSelect(sig, renderer);
 	lasso = new sigma.plugins.lasso(sig, renderer, {
 	    strokeStyle: page_settings['lassoToolStrokeColor'],
 	    fillWhileDrawing: true
 	});
 	select.bindLasso(lasso);
-	rectSelect = new sigma.plugins.rectSelect(sig, renderer);
 	select.bindRect(rectSelect);
 
 	// Change tooltip menu to edit features
@@ -1019,18 +1250,6 @@ function toggleEditorMode() {
 	// Revert background color
 	graph_container.style.backgroundColor = page_settings['stageBGColor'];
 
-	// Reenable collapsable header
-	$('#nav-hide-icon').wrap('<a aria-controls="collapseHeader" \
-aria-expanded="true" data-toggle="collapse" href="#collapseHeader" \
-onClick="toggleChevron()" class="hide-header-btn"></a>');
-
-	// Reenable clickable character stream
-	$table.find('tr').each(function(index, row) {
-	    $(row).find('td').slice(cache_index - cache_length + 1, cache_index + 1).children().each(function(i, e) {
-		$(e).wrap("<a href='#' onClick='indexClick(" + (cache_index - cache_length + i + 1) + ")'></a>");
-	    });
-	});
-
 	// Toggle tabs
 	$('#editor-tab').hide();
 	$('#editor-tab').removeClass('active');
@@ -1038,12 +1257,15 @@ onClick="toggleChevron()" class="hide-header-btn"></a>');
 	
 	$('#graph-settings').show();
 	$('#graph-tab').addClass('active');
-	$('#sim-tab').show();
+	if (cache_length > 0) 
+	    $('#sim-tab').show();
 
 	// Kill editor plugins
 	sigma.plugins.killDragNodes(sig);
 	sigma.plugins.killActiveState();
 	sigma.plugins.killSelect(sig);
+	sigma.plugins.killLasso(sig);
+	sigma.plugins.killRect(sig);
 	
 	// Revert Tooltip menu
 	sigma.plugins.killTooltips(sig);
@@ -1063,8 +1285,14 @@ onClick="toggleChevron()" class="hide-header-btn"></a>');
 			   ratio: cam.ratio * scale, 
 			   angle: cam.angle};
 
-	nodeScalar = 1;
-	edgeScalar = 1;
+	elemScalar = 1;
+
+	sig.graph.nodes().forEach(function(n) {
+	    n.size = nodeSize * elemScalar;
+	});	
+	sig.graph.edges().forEach(function(e) {
+	    e.size = edgeSize * elemScalar;
+	});
 
 	// Switch to WebGL renderer
 	sig.killRenderer(sig.renderers[0]);
@@ -1076,101 +1304,71 @@ onClick="toggleChevron()" class="hide-header-btn"></a>');
 	sig.cameras[0].goTo(camSettings);
 
 	// Turn autoRescale back on
-	sig.settings('autoRescale', true);
+	sig.settings('autoRescale', ['nodePosition']);
 	// Turn edge hovering off
 	sig.settings('enableEdgeHovering', false);
-	// Reset camera angle slider
-	//$('#angle-slider').val(0);
 
-	sig.refresh();
+	if (!automataChanged) { // If the core structure of the automata wasn't changed, do not reset simulation
+	    // Reenable collapsable header
+	    $('#nav-hide-icon').wrap('<a aria-controls="collapseHeader" ' +
+				     'aria-expanded="true" data-toggle="collapse" ' +
+				     'href="#collapseHeader" onClick="toggleChevron()" ' + 
+				     'class="hide-header-btn"></a>');
 
+	    // Reenable clickable character stream
+	    $table.find('tr').each(function(index, row) {
+		$(row).find('td').slice(cache_index - cache_length + 1, cache_index + 1).children().each(function(i, e) {
+		    $(e).wrap("<a href='#' onClick='indexClick(" + (cache_index - cache_length + i + 1) + ")'></a>");
+		});
+	    });
+
+	    // Resume simulation
+	    if (cache_index >= 0)
+		stepFromCache(0);
+	} 
+	else { // Automata was changed; reset simulation
+	    $('#reset-sim-btn').click();
+	}
+
+	automataChanged = false;
+	sig.refresh({skipIndexation: false});
     }    
 }
 
-// Editor Functions
+/**
+ * Activates or deactivates the lasso tool
+ * Deactivates 'Box Select' tool
+ */
+function toggleLasso() {
+    rectSelect.stop();
 
-function triggerAddSTE() {
-    tooltips.close();
-    $('#add-ste-modal').modal('show');
+    if (lasso.isActive) 
+	lasso.deactivate();
+    else
+	lasso.activate();
 }
 
-function addSTE(id, ss, rep_code, start, type) {
-    $('#add-ste-modal').modal('hide');
+/**
+ * Activates or deactivates the 'Box Select' tool
+ * Deactivates lasso tool
+ */
+function toggleRect() {
+    lasso.deactivate();
 
-    var newNode = {
-	id: id,
-	x: 1,
-	y: 1,
-	size: nodeSize * nodeScalar,
-	color: getColor(type),
-	originalColor: getColor(type),
-	data: {
-	    ss: ss,
-	    rep_code: rep_code,
-	    start: start,
-	    type: type
-	}
-    };
-    
-    // First STE added in default location (2 nodes are preloaded, shouldn't matter if otherwise)
-    if (sig.graph.nodes().length <= 2) {
-	// Max out size options when starting out
-	var $nodeSlider = $('#node-slider');
-	$nodeSlider.val($nodeSlider.attr("max"));
-	nodeSizeChange($nodeSlider.val());
-	var $edgeSlider = $('#edge-slider');
-	$edgeSlider.val($edgeSlider.attr("max"));
-	edgeSizeChange($edgeSlider.val());
-
-	newNode.size = nodeSize * nodeScalar;
-
-	// First node is centered, others can be used as reference points in dragNodes
-	// They cannot be on the same axis
-	newNode.x = 0;
-	newNode.y = 0;
-    }
-
-    // Allow user to place this node
-    dragListener.addNode(newNode);
-    
-    sig.refresh();
-    
+    if (rectSelect.isActive) 
+	rectSelect.stop();
+    else
+	rectSelect.start();
 }
 
-function addEdge(sourceId) {
-    tooltips.close();
-    
-    dragListener.addEdge(sourceId, edgeSize * edgeScalar);
-    select.addEdge(sourceId, edgeSize * edgeScalar);
-}
-
-function removeEdge(edgeId) {
-    tooltips.close();
-
-    var edge = sig.graph.edges(edgeId);
-    sig.graph.dropEdge(edgeId);
-    Wt.emit(Wt, "toggleConnection", edge.source, edge.target, false);
-    sig.refresh({skipIndexation: true});
-}
-
-function selectConnectedNodes(edgeId) {
-    tooltips.close();
-
-    var edge = sig.graph.edges(edgeId);
-    activeState.addNodes([edge.source, edge.target]);
-    sig.refresh({skipIndexation: true});
-}
-
-function triggerChangeData(nodeId) {
-    tooltips.close();
-    var node = sig.graph.nodes(nodeId),
-    start = (node.data.start) ? node.data.start.substring(12) : "none",
-    rep = (node.data.rep_code) ? node.data.rep_code.substring(13) : "";
-    editNodeId = nodeId;
-
-    Wt.emit(Wt, "changeSTEData", node.id, node.data.ss, start, rep);
-}
-
+/**
+ * Sends the new data to the graph helper function to update the node
+ * @param {String} id - the updated ID of the STE
+ * @param {String} ss - the updated symbol set of the STE
+ * @param {String} start - the updated start type data of the STE
+ * @param {String} rep - the updated report data of the STE
+ * @param {String} type - the update type of the STE
+ */
 function updateSTEData(id, ss, start, rep, type) {
     $('#add-ste-modal').modal('hide');
     var data = {
@@ -1183,15 +1381,100 @@ function updateSTEData(id, ss, start, rep, type) {
     sig.graph.changeData(editNodeId, data);
 }
 
-function triggerDeleteSTE(nodeId) {
+// *********************** //
+// *** STAGE FUNCTIONS *** //
+// *********************** //
+
+/**
+ * Opens the 'Search by ID' modal
+ */
+function openSearchBar() {
     tooltips.close();
-    $('#delete-ste-modal').modal('show');
-    Wt.emit(Wt, "deleteSTE", nodeId);
+    $('#search-modal').modal('show');
 }
 
-function deleteSTE(nodeId) {
-    $('#delete-ste-modal').modal('hide');    
-    sig.graph.dropNode(nodeId);
-    sig.refresh();
+/**
+ * Logs all node data to the console
+ */
+function printAllNodeData() {
+    tooltips.close();
+    sig.graph.nodes().forEach(function(n) {
+	/* DON'T REMOVE THIS */ console.log(n);
+    });
 }
 
+/**
+ * Logs the node data of the specified node to the console
+ * @param {String} nodeId - the ID of the node
+ */
+function printNodeData(nodeId) {
+    tooltips.close();
+    /* DON'T REMOVE THIS */ console.log(sig.graph.nodes(nodeId));
+}
+
+/**
+ * Zooms to the node whose ID is entered into the search bar
+ */
+function searchById() {
+    var bar = document.getElementById("search-bar");
+    locate_plugin.nodes(bar.value);
+    bar.value = "";
+    
+    sig.refresh({skipIndexation: true});    
+}
+
+/**
+ * Shows all nodes in the graph -- sets hidden to false
+ */
+function showAllNodes() {
+    tooltips.close();
+    sig.graph.visibleNodes().forEach(function(n) {
+	n.hidden = false;
+    });
+
+    sig.refresh({skipIndexation: true});
+}
+
+/**
+ * Displays only the children of the selected node on the graph
+ * @param {String} nodeId - the ID of the parent node
+ */
+function soloChildren(nodeId) {
+    tooltips.close();
+    var toKeep = sig.graph.children(nodeId, {});
+    toKeep[nodeId] = sig.graph.nodes(nodeId);
+ 
+    sig.graph.nodes().forEach(function(n) {
+	if (toKeep[n.id])
+	    n.hidden = false;
+	else
+	    n.hidden = true;
+    });
+
+    sig.refresh({skipIndexation: true});
+}
+
+/**
+ * Hides or shows all the children of the selected node
+ * @param {String} nodeId - the ID of the parent node
+ */
+function toggleChildren(nodeId) {
+    tooltips.close();
+    var toKeep = sig.graph.children(nodeId, {});
+
+    var hidden = true,
+    k;
+    // If any are visible, hide all; else show all
+    for (k in toKeep)
+	if (!toKeep[k].hidden && k != nodeId) {
+	    hidden = false;
+	    break;
+	}
+ 
+    sig.graph.nodes().forEach(function(n) {
+	if (toKeep[n.id] && nodeId !=  n.id)
+	    n.hidden = !hidden;
+    });
+
+    sig.refresh({skipIndexation: true});
+}

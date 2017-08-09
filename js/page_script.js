@@ -1,8 +1,14 @@
+/**
+ * Toggles the chevron on the header collapse bar
+ */
 function toggleChevron() {
     $('#nav-hide-icon').toggleClass("glyphicon glyphicon-chevron-up");
     $('#nav-hide-icon').toggleClass("glyphicon glyphicon-chevron-down");
 }
 
+/**
+ * Changes tab focus to 'Graph Settings'
+ */
 function graph_tab_clicked() {
     // Deselect other tabs
     $('#sim-tab').removeClass("active");
@@ -14,6 +20,9 @@ function graph_tab_clicked() {
     $('#graph-settings').show();
 }
 
+/**
+ * Changes tab focus to 'Simulation Tools'
+ */
 function sim_tab_clicked() {
     // Deselect other tabs
     $('#graph-tab').removeClass("active");
@@ -25,6 +34,9 @@ function sim_tab_clicked() {
     $('#sim-tools').show();
 }
 
+/**
+ * Changes tab focus to 'Editor Tools'
+ */
 function editor_tab_clicked() {
     // Deselect other tabs
     $('#graph-tab').removeClass("active");

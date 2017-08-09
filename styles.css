@@ -113,7 +113,7 @@
     cursor: auto;
     width: 100%;
     height: 100%;
-    padding: 4px;
+    padding: 4px 0;
 }
 .input-display-table a:visited {
     text-decoration: inherit;

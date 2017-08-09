@@ -108,7 +108,7 @@
 	    addEdge = false;
 	    Wt.emit(Wt, 'toggleConnection', sourceId, target, true);
 	    sourceId = null;
-	    s.refresh({skipIndexation: true});
+	    s.refresh({skipIndexation: false});
 
 	    return;
 	}

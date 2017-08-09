@@ -13,7 +13,7 @@
    * @param  {configurable}             settings     The settings function.
    */
   sigma.canvas.edges.curvedArrow =
-    function(edge, source, target, context, settings) {
+    function(edge, source, target, context, settings, ratio) {
     var color = edge.active ?
           edge.active_color || settings('defaultEdgeActiveColor') :
           edge.color,
@@ -23,7 +23,7 @@
         defaultEdgeColor = settings('defaultEdgeColor'),
         level = edge.active ? settings('edgeActiveLevel') : edge.level,
         cp = {},
-        size = edge[prefix + 'size'] || 1,
+        size = edge[prefix + 'size'] || edge['size'] || 1,
         tSize = target[prefix + 'size'],
         sX = source[prefix + 'x'],
         sY = source[prefix + 'y'],
@@ -35,6 +35,10 @@
         aY,
         vX,
         vY;
+
+	if (!edge[prefix + 'size']) {
+	    size /= ratio;
+	}
 
     cp = (source.id === target.id) ?
       sigma.utils.getSelfLoopControlPoints(sX, sY, tSize) :

@@ -435,10 +435,10 @@
    */
   sigma.utils.getSelfLoopControlPoints = function(x , y, size) {
     return {
-      x1: x - size * 7,
-      y1: y,
-      x2: x,
-      y2: y + size * 7
+      x1: x - size,
+      y1: y - size * 2.5,
+      x2: x - size * 3,
+      y2: y
     };
   };
 

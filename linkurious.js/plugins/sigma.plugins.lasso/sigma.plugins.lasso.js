@@ -335,4 +335,11 @@
     return _instances[sigmaInstance.id];
   };
 
+    sigma.plugins.killLasso = function(s) {
+	if (_instances[s.id] instanceof Lasso) {
+            _instances[s.id].clear();
+            delete _instances[s.id];
+	}
+    };
+
 }).call(this);

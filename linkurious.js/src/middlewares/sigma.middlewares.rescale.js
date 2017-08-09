@@ -34,7 +34,8 @@
         bounds = settings('bounds') || sigma.utils.getBoundaries(
           this.graph,
           readPrefix,
-          true
+          true,
+	    true
         ),
         minX = bounds.minX,
         minY = bounds.minY,
@@ -159,11 +160,11 @@
     }
   };
 
-  sigma.utils.getBoundaries = function(graph, prefix, doEdges) {
+  sigma.utils.getBoundaries = function(graph, prefix, doEdges, skipInvisibleNodes) {
     var i,
         l,
         e = graph.edges(),
-        n = graph.nodes(),
+        n = (skipInvisibleNodes) ? graph.visibleNodes() : graph.nodes(),
         weightMax = -Infinity,
         sizeMax = -Infinity,
         minX = Infinity,
@@ -175,13 +176,14 @@
       for (i = 0, l = e.length; i < l; i++)
         weightMax = Math.max(e[i][prefix + 'size'], weightMax);
 
-    for (i = 0, l = n.length; i < l; i++) {
-      sizeMax = Math.max(n[i][prefix + 'size'], sizeMax);
-      maxX = Math.max(n[i][prefix + 'x'], maxX);
-      minX = Math.min(n[i][prefix + 'x'], minX);
-      maxY = Math.max(n[i][prefix + 'y'], maxY);
-      minY = Math.min(n[i][prefix + 'y'], minY);
-    }
+      for (i = 0, l = n.length; i < l; i++) {
+	  sizeMax = Math.max(n[i][prefix + 'size'], sizeMax);
+	  maxX = Math.max(n[i][prefix + 'x'], maxX);
+	  minX = Math.min(n[i][prefix + 'x'], minX);
+	  maxY = Math.max(n[i][prefix + 'y'], maxY);
+	  minY = Math.min(n[i][prefix + 'y'], minY);
+      }
+      
 
     weightMax = weightMax || 1;
     sizeMax = sizeMax || 1;

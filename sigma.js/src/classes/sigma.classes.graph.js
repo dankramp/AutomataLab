@@ -57,6 +57,8 @@
        */
       nodesArray: [],
       edgesArray: [],
+      selfLoopArray: [],
+      visibleNodesArray: [],
 
       /**
        * GLOBAL INDEXES:
@@ -412,6 +414,8 @@
 
     // Add the node to indexes:
     this.nodesArray.push(validNode);
+      if (!validNode.invisible)
+	  this.visibleNodesArray.push(validNode);
     this.nodesIndex[validNode.id] = validNode;
 
     // Return the current instance:
@@ -485,8 +489,13 @@
     }
 
     // Add the edge to indexes:
+    if (validEdge.source === validEdge.target) {
+	validEdge.type = "curvedArrow";
+	this.selfLoopArray.push(validEdge);
+    }
     this.edgesArray.push(validEdge);
     this.edgesIndex[validEdge.id] = validEdge;
+
 
     if (!this.inNeighborsIndex[validEdge.target][validEdge.source])
       this.inNeighborsIndex[validEdge.target][validEdge.source] =
@@ -549,6 +558,11 @@
         this.nodesArray.splice(i, 1);
         break;
       }
+    for (i = 0, l = this.visibleNodesArray.length; i < l; i++)
+      if (this.visibleNodesArray[i].id === id) {
+        this.visibleNodesArray.splice(i, 1);
+        break;
+      }
 
     // Remove related edges:
     for (i = this.edgesArray.length - 1; i >= 0; i--)
@@ -594,11 +608,17 @@
     // Remove the edge from indexes:
     edge = this.edgesIndex[id];
     delete this.edgesIndex[id];
-    for (i = 0, l = this.edgesArray.length; i < l; i++)
-      if (this.edgesArray[i].id === id) {
-        this.edgesArray.splice(i, 1);
-        break;
-      }
+      for (i = 0, l = this.edgesArray.length; i < l; i++)
+	  if (this.edgesArray[i].id === id) {
+              this.edgesArray.splice(i, 1);	
+              break;
+	  }
+      for (i = 0, l = this.selfLoopArray.length; i < l; i++)
+	  if (this.selfLoopArray[i].id === id) {
+	      this.selfLoopArray.splice(i, 1);
+              break;
+	  }
+
 
     delete this.inNeighborsIndex[edge.target][edge.source][edge.id];
     if (!Object.keys(this.inNeighborsIndex[edge.target][edge.source]).length)
@@ -634,8 +654,12 @@
     // Delete arrays:
     this.nodesArray.length = 0;
     this.edgesArray.length = 0;
+    this.selfLoopArray.length = 0;      
+    this.visibleNodesArray.length = 0;      
     delete this.nodesArray;
     delete this.edgesArray;
+    delete this.selfLoopArray;
+    delete this.visibleNodesArray;
 
     // Delete indexes:
     delete this.nodesIndex;
@@ -657,6 +681,8 @@
   graph.addMethod('clear', function() {
     this.nodesArray.length = 0;
     this.edgesArray.length = 0;
+    this.selfLoopArray.length = 0;
+    this.visibleNodesArray.length = 0;
 
     // Due to GC issues, I prefer not to create new object. These objects are
     // only available from the methods and attached functions, but still, it is
@@ -761,6 +787,12 @@
     throw 'nodes: Wrong arguments.';
   });
 
+  graph.addMethod('visibleNodes', function() {
+    // Clone the array of nodes and return it:
+    if (!arguments.length)
+      return this.visibleNodesArray.slice(0);
+  });
+
   /**
    * This methods returns the degree of one or several nodes, depending on how
    * it is called. It is also possible to get incoming or outcoming degrees
@@ -841,6 +873,12 @@
 
     throw 'edges: Wrong arguments.';
   });
+
+  graph.addMethod('selfLoops', function() {
+    // Clone the array of edges and return it:
+      return this.selfLoopArray.slice(0);
+  });
+
 
 
   /**

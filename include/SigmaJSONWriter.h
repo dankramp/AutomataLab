@@ -208,9 +208,7 @@ class SigmaJSONWriter {
       data_string.replace(start_pos, 1, R"(\\)");
       start_pos += 2;
     }
-    std::cout << data_string << std::endl;
     data = json11::Json::parse(data_string, err);
-    std::cout << err << std::endl;
 
     // Base case: no children
     if (parent->getOutputs().empty()) {
@@ -239,12 +237,6 @@ class SigmaJSONWriter {
 	
 	if (DEBUG) 
 	  std::cout << "Running loop on '" << parent->getId() << "'s child '" << child->getId() << "' with xPos=" << std::to_string(xPos) << std::endl;
-	/*
-	  std::string type = "arrow";
-	  // Self-loop handling
-	  if (child->getId() == parent->getId())
-	  
-	  type = "curveArrow";*/
 
 	// Only run recursive call if not a self-loop
 	int positionOfChild = xPos;

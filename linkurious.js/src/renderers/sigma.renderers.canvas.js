@@ -135,7 +135,7 @@
     params.ctx.save();
 
     for (i = params.start; i < params.end; i++) {
-      if (!els[i].hidden) {
+      if (!els[i].hidden && !els[i].invisible) {
         specializedRenderer = params.renderers[
           els[i].type || params.settings(elementType)
         ];
@@ -258,6 +258,7 @@
 
       for (a = this.nodesOnScreen, i = 0, l = a.length; i < l; i++)
 	  index[a[i].id] = a[i];
+
     // Draw edges:
     // - If settings('batchEdgesDrawing') is true, the edges are displayed per
     //   batches. If not, they are drawn in one frame.

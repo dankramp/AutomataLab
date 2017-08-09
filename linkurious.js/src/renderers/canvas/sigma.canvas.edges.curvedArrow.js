@@ -69,7 +69,9 @@
     context.lineWidth = size;
     context.beginPath();
     context.moveTo(sX, sY);
+	console.log("Line width: " + context.lineWidth);
     if (source.id === target.id) {
+	console.log("Self loop line width: " + context.lineWidth);
       context.bezierCurveTo(cp.x2, cp.y2, cp.x1, cp.y1, aX, aY);
     } else {
       context.quadraticCurveTo(cp.x, cp.y, aX, aY);

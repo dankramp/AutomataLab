@@ -3,10 +3,10 @@ TARGET = VASimVis
 
 # DIRECTORIES
 VASIM = VASim
-MNRL = $(VASIM)/MNRL/C++
+MNRL = $(VASIM)/libs/MNRL/C++
 JSON11 = $(MNRL)/lib/json11
 JSON = $(MNRL)/lib/valijson/thirdparty/nlohmann-json-1.1.0
-PUGI = $(VASIM)/pugixml-1.6/src
+PUGI = $(VASIM)/libs/pugixml/src
 WT=-lwthttp -lwt -lboost_random -lboost_regex -lboost_signals -lboost_system -lboost_thread -lboost_filesystem -lboost_program_options -lboost_date_time
 LIBS=/usr/local/
 

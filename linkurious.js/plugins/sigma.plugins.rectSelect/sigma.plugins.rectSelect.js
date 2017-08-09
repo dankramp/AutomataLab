@@ -330,4 +330,11 @@
     return _instances[sigmaInstance.id];
   };
 
+    sigma.plugins.killRect = function(s) {
+	if (_instances[s.id] instanceof RectSelect) {
+            _instances[s.id].clear();
+            delete _instances[s.id];
+	}
+    };
+
 }).call(this);
