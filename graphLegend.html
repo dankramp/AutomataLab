@@ -1,0 +1,84 @@
+<html>
+  <head>
+    <title>Graph Legend</title>
+
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <!-- Custom style sheet -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Latest compiled and minified JavaScript -->
+    <!-- Probably dont need this <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script> -->
+    <script src="js/ViewerSettings.js"></script>
+  </head>
+
+
+  <body>
+    <div class="legend-container">
+      <h2 style="margin-left: 5px">Graph Legend</h2>
+      <table class="table table-striped">
+	<tr>
+	  <th colspan="2">Inactive Elements</th>
+	</tr>
+	<tr>
+	  <td rowspan="3" class="canvas-cell" style="padding:0">
+	    <canvas id="legend-canvas-1" width="60px" height="180px"></canvas>
+	  </td>
+	  <td>STE</td>
+	</tr>
+	<tr>
+	  <td>Report STE</td>
+	</tr>
+	<tr>
+	  <td>Start STE</td>
+	</tr>
+
+	<tr>
+	  <th colspan="2">Active Elements</th>
+	</tr>
+	<tr>
+	  <td rowspan="3" class="canvas-cell" style="padding:0">
+	    <canvas id="legend-canvas-2" width="60px" height="180px"></canvas>
+	  </td>
+	  <td>Enabled STE</td>
+	</tr>
+	<tr>
+	  <td>Activated STE</td>
+	</tr>
+	<tr>
+	  <td>Reporting STE</td>
+	</tr>
+      </table>
+    </div>
+    
+    <script>
+      function drawNode(ctx, y, color) {
+      ctx.beginPath();
+      ctx.arc(30, y, 20, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      }
+
+      var settings = new Settings();
+      var canvas = document.getElementById("legend-canvas-1");
+      var ctx = canvas.getContext("2d");
+      
+      // Default STE
+      drawNode(ctx, 30, settings.settings()['defaultSTEColor']);
+      // Report STE
+      drawNode(ctx, 90, settings.settings()['defaultReportSTEColor']);
+      // Start STE
+      drawNode(ctx, 150, settings.settings()['defaultStartSTEColor']);
+
+      canvas = document.getElementById("legend-canvas-2");
+      ctx = canvas.getContext("2d");
+      
+      // Enabled STE
+      drawNode(ctx, 30, settings.settings()['enabledSTEColor']);
+      // Activated STE
+      drawNode(ctx, 90, settings.settings()['activatedSTEColor']);
+      // Reporting STE
+      drawNode(ctx, 150, settings.settings()['reportingSTEColor']);
+
+    </script>
+  </body>
+</html>

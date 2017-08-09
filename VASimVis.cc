@@ -1,5 +1,5 @@
-#include <Wt/Http/Client>
-#include <Wt/Http/Request>
+//#include <Wt/Http/Client>
+//#include <Wt/Http/Request>
 #include <Wt/WApplication>
 #include <Wt/WAnchor>
 #include <Wt/WBreak>
@@ -9,10 +9,11 @@
 #include <Wt/WEnvironment>
 #include <Wt/WFileUpload>
 #include <Wt/WIntValidator>
+#include <Wt/WJavaScript>
+#include <Wt/WLabel>
 #include <Wt/WLineEdit>
 #include <Wt/WLink>
 #include <Wt/WPushButton>
-#include <Wt/WSlider>
 #include <Wt/WText>
 #include <Wt/WTable>
 #include <Wt/WTableRow>
@@ -34,32 +35,53 @@ public:
   void newFileUploaded();
   void loadTextFromFile(std::string fn);
   void loadInputTable();
-  void handleAutomataFile(bool global, bool OR, std::string fn, int32_t fanin_limit=-1, int32_t fanout_limit=-1);
+  void handleAutomataFile(bool jsonGraph, bool global, bool OR, std::string fn, int32_t fanin_limit=-1, int32_t fanout_limit=-1);
   void loadRandomAutomata();
   std::string simulateAutomata(char symbol);
+  void resetSimulation();
   void beginSimulation();
   void addToJSCache(int numGraphs);
   void loadDemoGraph(std::string name, bool user);
+  void toggleConnection(std::string sourceId, std::string targetId, bool addEdge);
+  void changeSTEData(std::string id, std::string ss, std::string start, std::string rep);
+  void deleteSTE(std::string id);
+ 
+  Wt::JSignal<std::string, std::string, bool> toggleConnection_;
+  Wt::JSignal<std::string, std::string, std::string, std::string> changeSTEData_;
+  Wt::JSignal<std::string> deleteSTE_;
 
 private:
   std::string fn;
   std::string input_string;
+  std::string json_string;
   const int max_input_display_size = 1000;
 
-  Wt::WText *modal_message = new Wt::WText();
+  Wt::WText *load_modal_message = new Wt::WText();
   Wt::WTable *input_display_table;
   Wt::WPushButton *sim_step;
   Wt::WPushButton *sim_rev;
   Wt::WPushButton *simulate;
   Wt::WComboBox *anmlzoo_combo;
+  Wt::WText *error_modal_message;
+
+  Wt::WText *ste_options_title;
+  Wt::WLineEdit *ste_id_input;
+  Wt::WLineEdit *ste_ss_input;
+  Wt::WLabel *ste_rep_label;
+  Wt::WCheckBox *reporting_check;
+  Wt::WLineEdit *ste_rep_input;
+  Wt::WComboBox *ste_start_select;
+  Wt::WPushButton *ste_options_create_btn;
+  std::string ste_id;
+  Wt::WText *delete_modal_text;
 
   Automata ap;
   json11::Json cache = json11::Json::array{};
 
   bool automataUploaded = false;
-  bool validAutomata = false;
+  bool validJson = false;
   bool validInput = false;
-  bool hexMode = false;
+  bool editingSTE = false;
   int cache_index = -1;
   // How many new items to add to cache
   int cache_fetch_size = 100;
@@ -67,75 +89,123 @@ private:
 };
 
 VASimViz::VASimViz(const Wt::WEnvironment& env)
-  : Wt::WApplication(env)
+  : Wt::WApplication(env),
+    toggleConnection_(this, "toggleConnection"),
+    changeSTEData_(this, "changeSTEData"),
+    deleteSTE_(this, "deleteSTE")
 {
 
+  toggleConnection_.connect(this, &VASimViz::toggleConnection);
+  changeSTEData_.connect(this, &VASimViz::changeSTEData);
+  deleteSTE_.connect(this, &VASimViz::deleteSTE);
+
+  // Set page title
   setTitle("ANML Viewer");
-  // Style sheets
+
+  /* STYLE SHEETS */
+
   Wt::WApplication::instance()->useStyleSheet("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css");
   Wt::WApplication::instance()->useStyleSheet("styles.css");
   
-  // Imports
+  /* IMPORTS */
+  // Some are from sigma.js, some from linkurious.js, because linkurious plugins
+  // require some core to be from itself, but some parts of sigma core are faster
   
+  // Core
   Wt::WApplication::instance()->require("/sigma.js/src/sigma.core.js");
   Wt::WApplication::instance()->require("/sigma.js/src/conrad.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/utils/sigma.utils.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/utils/sigma.utils.js");
   Wt::WApplication::instance()->require("/sigma.js/src/utils/sigma.polyfills.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/sigma.settings.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.dispatcher.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/sigma.settings.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/classes/sigma.classes.dispatcher.js");
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.configurable.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.graph.js");
+  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.graph.js"); // this makes RandomForest fast/slow
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.camera.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.quad.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/classes/sigma.classes.quad.js");
   Wt::WApplication::instance()->require("/sigma.js/src/classes/sigma.classes.edgequad.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/captors/sigma.captors.mouse.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/captors/sigma.captors.touch.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.canvas.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.mouse.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/captors/sigma.captors.touch.js");
+
+  // Renderers
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/sigma.renderers.canvas.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.webgl.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.svg.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/sigma.renderers.def.js");
+
+  // WebGL 
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.fast.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.labels.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.hovers.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.nodes.def.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.def.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curve.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.arrow.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curve.js");
-  //Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js");
-  /*
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.utils.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.nodes.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.edges.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.edges.curve.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.labels.def.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/renderers/svg/sigma.svg.hovers.def.js");
-  */
-  Wt::WApplication::instance()->require("/sigma.js/src/middlewares/sigma.middlewares.rescale.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/middlewares/sigma.middlewares.copy.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/misc/sigma.misc.animation.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/misc/sigma.misc.bindEvents.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/misc/sigma.misc.bindDOMEvents.js");
-  Wt::WApplication::instance()->require("/sigma.js/src/misc/sigma.misc.drawHovers.js");
-  // Sigma plugins
-  //Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.parsers.json/sigma.parsers.json.js");
-  //Wt::WApplication::instance()->require("/sigma.js/build/plugins/sigma.layout.forceAtlas2.min.js");
 
-  //Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.renderers.customShapes/shape-library.js");
-  //  Wt::WApplication::instance()->require("/sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js");
-  
+  // Canvas
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.labels.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.hovers.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.nodes.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.edges.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.edges.arrow.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js");
+  Wt::WApplication::instance()->require("/sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/renderers/canvas/sigma.canvas.extremities.def.js");
 
-  /**
-   * The fixed page header
-   **/
-  Wt::WContainerWidget *fixed_header = new Wt::WContainerWidget(root());
+  // Middlewares and misc
+  Wt::WApplication::instance()->require("/linkurious.js/src/middlewares/sigma.middlewares.rescale.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/middlewares/sigma.middlewares.copy.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.animation.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.bindEvents.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.bindDOMEvents.js");
+  Wt::WApplication::instance()->require("/linkurious.js/src/misc/sigma.misc.drawHovers.js");
+
+  // Linkurious plugins
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.dragNodes/sigma.plugins.dragNodes.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.helpers.graph/sigma.helpers.graph.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.activeState/sigma.plugins.activeState.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.select/sigma.plugins.select.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.keyboard/sigma.plugins.keyboard.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.lasso/sigma.plugins.lasso.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.rectSelect/sigma.plugins.rectSelect.js");
+
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.locate/sigma.plugins.locate.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.plugins.tooltips/sigma.plugins.tooltips.js");
+
+  // Linkurious renderer
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/settings.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.labels.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.hovers.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.nodes.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.def.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.arrow.js");
+  Wt::WApplication::instance()->require("/linkurious.js/plugins/sigma.renderers.linkurious/canvas/sigma.canvas.edges.curvedArrow.js");
+
+  // JQuery
+  Wt::WApplication::instance()->requireJQuery("https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js");
+  // Bootstrap
+  Wt::WApplication::instance()->require("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js");
+  // Mustache
+  Wt::WApplication::instance()->require("https://cdnjs.cloudflare.com/ajax/libs/mustache.js/0.8.1/mustache.min.js");  
+  // FileSaver
+  Wt::WApplication::instance()->require("FileSaver.js/FileSaver.js");  
+  // Custom page scripts
+  Wt::WApplication::instance()->require("js/ViewerSettings.js");
+  Wt::WApplication::instance()->require("js/page_script.js");
+  Wt::WApplication::instance()->require("js/sigma_script.js"); 
+
+
+  // Full page container
+  Wt::WContainerWidget *full_page_container = new Wt::WContainerWidget(root());
+  full_page_container->setId("page-container");
+
+
+
+  // ******************* //
+  // *** PAGE HEADER *** //
+  // ******************* //
+
+
+  Wt::WContainerWidget *fixed_header = new Wt::WContainerWidget(full_page_container);
   fixed_header->setStyleClass("fixed-header");
+  fixed_header->setId("header");
   Wt::WContainerWidget *collapse_in = new Wt::WContainerWidget(fixed_header);
   collapse_in->setStyleClass("collapse in");
   collapse_in->setId("collapseHeader");
@@ -145,95 +215,27 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   container_head->setStyleClass("container");
   container_head->addWidget(new Wt::WText("<h1>ANML Viewer</h1>"));
   container_head->addWidget(new Wt::WText("<p>Visualize an automata machine and simulate for a given text file.</p>"));
-
-  /*
-   * Error Modal
-   */
-  Wt::WContainerWidget *error_modal = new Wt::WContainerWidget(root());
-  error_modal->setStyleClass("modal fade");
-  error_modal->setId("error-modal");
-  error_modal->setAttributeValue("tabindex", "-1");
-  error_modal->setAttributeValue("role", "dialog");
-  error_modal->setAttributeValue("aria-labelledby", "errorModalLabel");
-  error_modal->setAttributeValue("aria-hidden", "true");
-  Wt::WContainerWidget *error_modal_dialog = new Wt::WContainerWidget(error_modal);
-  error_modal_dialog->setStyleClass("modal-dialog modal-sm");
-  error_modal_dialog->setAttributeValue("role", "document");
-  Wt::WContainerWidget *error_modal_content = new Wt::WContainerWidget(error_modal_dialog);
-  error_modal_content->setStyleClass("modal-content");
-  Wt::WContainerWidget *error_modal_header = new Wt::WContainerWidget(error_modal_content);
-  error_modal_header->setStyleClass("modal-header");
-  error_modal_header->addWidget(new Wt::WText("<h3 class=\"modal-title\">Error</h3>"));
-  Wt::WContainerWidget *error_modal_body = new Wt::WContainerWidget(error_modal_content);
-  error_modal_body->setStyleClass("modal-body");
-  Wt::WText *error_modal_message = new Wt::WText(error_modal_body);
-  Wt::WContainerWidget *error_modal_footer = new Wt::WContainerWidget(error_modal_content);
-  error_modal_footer->setStyleClass("modal-footer");
-  Wt::WPushButton *close_error_modal_button = new Wt::WPushButton("Close", error_modal_footer);
-  close_error_modal_button->setStyleClass("btn btn-default");
-  close_error_modal_button->setAttributeValue("data-dismiss", "modal");
-
-  /* 
-   * Input table
-   */
-  Wt::WTable *input_table = new Wt::WTable();
+  Wt::WTable *input_table = new Wt::WTable(container_head);
   input_table->setHeaderCount(1);
-  input_table->setStyleClass("input-table");
-  // Header row
-  input_table->elementAt(0,0)->addWidget(new Wt::WText("Upload an automata file (.anml/.mnrl)"));
-  input_table->elementAt(0,0)->setStyleClass("input-table-cell");
-  input_table->elementAt(0,1)->addWidget(new Wt::WText("Upload an input file or  <a role='button' data-toggle='modal' data-target='#text-input-modal'>type input</a>", Wt::XHTMLUnsafeText));
-  input_table->elementAt(0,1)->setStyleClass("input-table-cell");
-  input_table->elementAt(0,2)->addWidget(new Wt::WText("OR Select an ANMLZoo file"));
-  input_table->elementAt(0,2)->setStyleClass("input-table-cell");
-  simulate = new Wt::WPushButton("Simulate >>");
-  simulate->setStyleClass("btn btn-primary btn-lg");
-  simulate->clicked().connect( std::bind([=] () {
-	// No automata file uploaded
-	if (!automataUploaded) {
-	  error_modal_message->setText("Automata file must first be uploaded before simulation.");
-	  doJavaScript("$('#error-modal').modal('show');");
-	}
-	// File uploaded is not valid automata
-	else if (!validAutomata) {
-	  error_modal_message->setText("Cannot simulate over given automata file. \nPlease upload .mnrl or .anml file to simulate.");
-	  doJavaScript("$('#error-modal').modal('show');");
-	}
-	// No input file to simulate on
-	else if (!validInput) {
-	  error_modal_message->setText("Please upload an input file to simulate on.");
-	  doJavaScript("$('#error-modal').modal('show');");
-	}
-	// All inputs valid
-	else {
-	  doJavaScript("$('#collapseHeader').collapse()");
-	  doJavaScript("toggleChevron()");
-	  doJavaScript("$('#sim-tab').show()");
-	  doJavaScript("sim_tab_clicked()");
+  input_table->setStyleClass("header-table");
 
-	  beginSimulation();
-	  simulate->setEnabled(false);
-	}
-	  
-      }));
-  input_table->elementAt(1,3)->addWidget(simulate);
-  input_table->elementAt(1,3)->setStyleClass("input-table-cell");
-  input_table->elementAt(1,3)->setRowSpan(2);
+  /* Table Headers */
+
+  input_table->elementAt(0,0)->addWidget(new Wt::WText("Upload an automata file (.anml/.mnrl)"));
+  input_table->elementAt(0,1)->addWidget(new Wt::WText("Upload an input file or  <a role='button' data-toggle='modal' data-target='#text-input-modal'>type input</a>", Wt::XHTMLUnsafeText));
+  input_table->elementAt(0,2)->addWidget(new Wt::WText("OR Select an ANMLZoo file"));
   
-  // Input row
+  /* Input row */
  
   Wt::WFileUpload *automata_file_upload = new Wt::WFileUpload(input_table->elementAt(1,0));
   automata_file_upload->setFileTextSize(30);
-  //automata_file_upload->setFilters(".anml"); v3.3.7
   automata_file_upload->setId("automata_file");
 
   Wt::WFileUpload *input_file_upload = new Wt::WFileUpload(input_table->elementAt(1,1));
-  //input_file_upload->setFilters(".input"); v3.3.7
   input_file_upload->setId("input_file");
 
   anmlzoo_combo = new Wt::WComboBox(input_table->elementAt(1,2));
   anmlzoo_combo->setId("anmlzoo-combo");
-
   anmlzoo_combo->addItem("- Select ANMLZoo File -");
   anmlzoo_combo->addItem("Brill");
   anmlzoo_combo->addItem("ClamAV");
@@ -252,23 +254,37 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   //anmlzoo_combo->addItem("Random");
   anmlzoo_combo->setCurrentIndex(0);
   anmlzoo_combo->setMargin(10, Wt::Right);
-
   anmlzoo_combo->changed().connect(std::bind([=] () {
 	if (anmlzoo_combo->currentIndex() > 0)
 	  loadDemoGraph(anmlzoo_combo->currentText().toUTF8(), true);
       }));
 
-  input_table->elementAt(1,0)->setStyleClass("input-table-cell");
-  input_table->elementAt(1,1)->setStyleClass("input-table-cell");
-  input_table->elementAt(1,2)->setStyleClass("input-table-cell");
-  container_head->addWidget(input_table); 
+  simulate = new Wt::WPushButton("Simulate <span class='glyphicon glyphicon-forward' aria-hidden='true'></span>");
+  simulate->setTextFormat(Wt::XHTMLUnsafeText);
+  simulate->setStyleClass("btn btn-primary btn-lg");
+  simulate->clicked().connect( std::bind([=] () {
+	if (ap.getElements().size() < 1) { // Automata is empty
+	  error_modal_message->setText("Automata has no elements. Please upload a file or create an automata before simulating.");
+	  doJavaScript("$('#error-modal').modal('show');");
+	} else if (!validInput) { // No input file to simulate on
+	  error_modal_message->setText("Please upload an input file to simulate on.");
+	  doJavaScript("$('#error-modal').modal('show');");
+	} else { // All inputs valid
+	  doJavaScript("$('#collapseHeader').collapse()");
+	  doJavaScript("toggleChevron()");
+	  doJavaScript("$('#sim-tab').show()");
+	  doJavaScript("sim_tab_clicked()");
+	  beginSimulation();
+	  simulate->setEnabled(false);
+	}
+      }));
+  input_table->elementAt(1,3)->addWidget(simulate);
    
-  /*
-   * Collapse header button/bar
-  */
+  /* Collapse header button/bar */
 
   Wt::WContainerWidget *collapse_bar = new Wt::WContainerWidget(fixed_header);
   collapse_bar->setStyleClass("collapse-bar");
+  collapse_bar->setId("click-collapse-bar");
   Wt::WAnchor *hide_header_btn = new Wt::WAnchor(Wt::WLink("#collapseHeader"), collapse_bar);
   hide_header_btn->setStyleClass("hide-header-btn");
   hide_header_btn->setAttributeValue("data-toggle", "collapse");
@@ -279,15 +295,42 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   glyphicon_chevron->setStyleClass("glyphicon glyphicon-chevron-up");
   glyphicon_chevron->setId("nav-hide-icon");
   glyphicon_chevron->setAttributeValue("aria-hidden", "true");
-  //hide_header_btn->setText("<span id=\"nav-hide-icon\" class=\"glyphicon glyphicon-chevron-up\" aria-hidden=\"true\"></span>");
-  
 
+
+  // ************** //
   // *** MODALS *** //
+  // ************** //
 
-  /*
-   * Type input modal
-   */
-  Wt::WContainerWidget *text_input_modal = new Wt::WContainerWidget(root());
+
+  /* Error Modal */
+
+  Wt::WContainerWidget *error_modal = new Wt::WContainerWidget(full_page_container);
+  error_modal->setStyleClass("modal fade");
+  error_modal->setId("error-modal");
+  error_modal->setAttributeValue("tabindex", "-1");
+  error_modal->setAttributeValue("role", "dialog");
+  error_modal->setAttributeValue("aria-labelledby", "errorModalLabel");
+  error_modal->setAttributeValue("aria-hidden", "true");
+  Wt::WContainerWidget *error_modal_dialog = new Wt::WContainerWidget(error_modal);
+  error_modal_dialog->setStyleClass("modal-dialog modal-sm");
+  error_modal_dialog->setAttributeValue("role", "document");
+  Wt::WContainerWidget *error_modal_content = new Wt::WContainerWidget(error_modal_dialog);
+  error_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *error_modal_header = new Wt::WContainerWidget(error_modal_content);
+  error_modal_header->setStyleClass("modal-header");
+  error_modal_header->addWidget(new Wt::WText("<h3 class=\"modal-title\">Error</h3>"));
+  Wt::WContainerWidget *error_modal_body = new Wt::WContainerWidget(error_modal_content);
+  error_modal_body->setStyleClass("modal-body");
+  error_modal_message = new Wt::WText(error_modal_body);
+  Wt::WContainerWidget *error_modal_footer = new Wt::WContainerWidget(error_modal_content);
+  error_modal_footer->setStyleClass("modal-footer");
+  Wt::WPushButton *close_error_modal_button = new Wt::WPushButton("Close", error_modal_footer);
+  close_error_modal_button->setStyleClass("btn btn-default");
+  close_error_modal_button->setAttributeValue("data-dismiss", "modal");
+
+  /* Type Input Modal */
+
+  Wt::WContainerWidget *text_input_modal = new Wt::WContainerWidget(full_page_container);
   text_input_modal->setStyleClass("modal fade");
   text_input_modal->setId("text-input-modal");
   text_input_modal->setAttributeValue("tabindex", "-1");
@@ -315,17 +358,14 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   submit_text_input_btn->setStyleClass("btn btn-primary");
   submit_text_input_btn->setAttributeValue("data-dismiss", "modal");
   submit_text_input_btn->clicked().connect(std::bind( [=]() {
-	//doJavaScript("$('#text-input-modal').modal('hide');");
-	newFileUploaded();
 	input_string = text_input_area->text().toUTF8();
 	loadInputTable();
 	text_input_area->setText("");
       }));
 
-  /*
-   * Simulating cache dialog
-   */
-  Wt::WContainerWidget *small_modal = new Wt::WContainerWidget(root());
+  /* Simulating Cache modal */
+
+  Wt::WContainerWidget *small_modal = new Wt::WContainerWidget(full_page_container);
   small_modal->setStyleClass("modal bs-example-modal-sm");
   small_modal->setId("cache-modal");
   small_modal->setAttributeValue("role", "dialog");
@@ -338,34 +378,96 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WContainerWidget *small_modal_content = new Wt::WContainerWidget(small_modal_dialog);
   small_modal_content->setStyleClass("modal-content");
   small_modal_content->addWidget(new Wt::WText("Simulating automata into cache..."));
-  /*
-   * Loading dialog
-   */
-  Wt::WContainerWidget *modal = new Wt::WContainerWidget(root());
-  modal->setStyleClass("modal bd-example-modal-sm");
-  modal->setId("loading-graph-modal");
-  modal->setAttributeValue("tabindex", "-1");
-  modal->setAttributeValue("role", "dialog");
-  modal->setAttributeValue("aria-labelledby", "mySmallModalLabel");
-  modal->setAttributeValue("aria-hidden", "true");
-  modal->setAttributeValue("data-backdrop", "static");
-  Wt::WContainerWidget *modal_dialog = new Wt::WContainerWidget(modal);
-  modal_dialog->setStyleClass("modal-dialog modal-sm");
-  Wt::WContainerWidget *modal_content = new Wt::WContainerWidget(modal_dialog);
-  modal_content->setStyleClass("modal-content");
-  Wt::WContainerWidget *modal_header = new Wt::WContainerWidget(modal_content);
-  modal_header->setStyleClass("modal-header");
-  Wt::WText *modal_title = new Wt::WText("<h3 class=\"modal-title\">Please wait</h3>");
-  modal_header->addWidget(modal_title);
-  Wt::WContainerWidget *modal_body = new Wt::WContainerWidget(modal_content);
-  modal_body->setStyleClass("modal-body");
-  modal_message->setText("Uploading file...");
-  modal_body->addWidget(modal_message);
+
+  /* Search By ID Modal */
+
+  Wt::WContainerWidget *search_modal = new Wt::WContainerWidget(full_page_container);  
+  search_modal->setStyleClass("modal bs-example-modal-sm");
+  search_modal->setId("search-modal");
+  search_modal->setAttributeValue("role", "dialog");
+  search_modal->setAttributeValue("aria-hidden", "true");
+  search_modal->setAttributeValue("tabindex", "-1");
+  Wt::WContainerWidget *search_modal_dialog = new Wt::WContainerWidget(search_modal);
+  search_modal_dialog->setStyleClass("modal-dialog modal-sm");
+  search_modal_dialog->setAttributeValue("role", "document");
+  Wt::WContainerWidget *search_modal_content = new Wt::WContainerWidget(search_modal_dialog);
+  search_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *search_modal_header = new Wt::WContainerWidget(search_modal_content);
+  search_modal_header->setStyleClass("modal-header");
+  search_modal_header->addWidget(new Wt::WText("<h3 class='modal-title'>Search By ID</h3>"));
+  Wt::WContainerWidget *search_modal_body = new Wt::WContainerWidget(search_modal_content);
+  search_modal_body->setStyleClass("modal-body");
+  Wt::WContainerWidget *search_modal_input_group = new Wt::WContainerWidget(search_modal_body);
+  search_modal_input_group->setStyleClass("input-group");
+  Wt::WLineEdit *search_bar = new Wt::WLineEdit(search_modal_input_group);
+  search_bar->setStyleClass("form-control");
+  search_bar->setId("search-bar");
+  search_bar->setAttributeValue("placeholder", "Search by ID...");
+  search_bar->enterPressed().connect(std::bind( [=]() {
+	doJavaScript("$('#search-btn').click()");
+      }));
+  Wt::WText *search_button = new Wt::WText("<button class='btn btn-secondary' id='search-btn' onClick='searchById()' data-dismiss='modal' type='button'>Search</button>", Wt::XHTMLUnsafeText, search_modal_input_group);
+  search_button->setStyleClass("input-group-btn");
+
+  /* Delete By ID Modal */
+
+  Wt::WContainerWidget *delete_modal = new Wt::WContainerWidget(full_page_container);  
+  delete_modal->setStyleClass("modal bs-example-modal-sm");
+  delete_modal->setId("delete-ste-modal");
+  delete_modal->setAttributeValue("role", "dialog");
+  delete_modal->setAttributeValue("aria-hidden", "true");
+  delete_modal->setAttributeValue("tabindex", "-1");
+  Wt::WContainerWidget *delete_modal_dialog = new Wt::WContainerWidget(delete_modal);
+  delete_modal_dialog->setStyleClass("modal-dialog modal-sm");
+  delete_modal_dialog->setAttributeValue("role", "document");
+  Wt::WContainerWidget *delete_modal_content = new Wt::WContainerWidget(delete_modal_dialog);
+  delete_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *delete_modal_header = new Wt::WContainerWidget(delete_modal_content);
+  delete_modal_header->setStyleClass("modal-header");
+  delete_modal_header->addWidget(new Wt::WText("<h3 class='modal-title'>Confirm Delete</h3>"));
+  Wt::WContainerWidget *delete_modal_body = new Wt::WContainerWidget(delete_modal_content);
+  delete_modal_body->setStyleClass("modal-body");
+  delete_modal_text = new Wt::WText("Are you sure you want to delete this STE?", delete_modal_body);
+  Wt::WContainerWidget *delete_modal_footer = new Wt::WContainerWidget(delete_modal_content);
+  delete_modal_footer->setStyleClass("modal-footer");
+  Wt::WPushButton *delete_modal_cancel_btn = new Wt::WPushButton("No", delete_modal_footer);
+  delete_modal_cancel_btn->setStyleClass("btn btn-default");
+  delete_modal_cancel_btn->setAttributeValue("data-dismiss", "modal");
+  Wt::WPushButton *delete_modal_confirm_btn = new Wt::WPushButton("Yes", delete_modal_footer);
+  delete_modal_confirm_btn->setId("delete-ste-btn");
+  delete_modal_confirm_btn->setStyleClass("btn btn-danger");
+  delete_modal_confirm_btn->setAttributeValue("data-dismiss", "modal");
+  delete_modal_confirm_btn->clicked().connect(std::bind( [=]() {
+	ap.removeElement(ap.getElements()[ste_id]);
+	doJavaScript("deleteSTE('" + ste_id + "')");
+      }));
+
+  /* Loading modal */
+
+  Wt::WContainerWidget *load_modal = new Wt::WContainerWidget(full_page_container);
+  load_modal->setStyleClass("modal bd-example-modal-sm");
+  load_modal->setId("loading-graph-modal");
+  load_modal->setAttributeValue("tabindex", "-1");
+  load_modal->setAttributeValue("role", "dialog");
+  load_modal->setAttributeValue("aria-labelledby", "mySmallModalLabel");
+  load_modal->setAttributeValue("aria-hidden", "true");
+  load_modal->setAttributeValue("data-backdrop", "static");
+  Wt::WContainerWidget *load_modal_dialog = new Wt::WContainerWidget(load_modal);
+  load_modal_dialog->setStyleClass("modal-dialog modal-sm");
+  Wt::WContainerWidget *load_modal_content = new Wt::WContainerWidget(load_modal_dialog);
+  load_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *load_modal_header = new Wt::WContainerWidget(load_modal_content);
+  load_modal_header->setStyleClass("modal-header");
+  Wt::WText *load_modal_title = new Wt::WText("<h3 class=\"modal-title\">Please wait</h3>");
+  load_modal_header->addWidget(load_modal_title);
+  Wt::WContainerWidget *load_modal_body = new Wt::WContainerWidget(load_modal_content);
+  load_modal_body->setStyleClass("modal-body");
+  load_modal_message->setText("Uploading file...");
+  load_modal_body->addWidget(load_modal_message);
   
-  /*
-   * ANML Options dialog
-   */
-  Wt::WContainerWidget *options_modal = new Wt::WContainerWidget(root());
+  /* ANML Construction Options modal */
+
+  Wt::WContainerWidget *options_modal = new Wt::WContainerWidget(full_page_container);
   options_modal->setStyleClass("modal fade");
   options_modal->setId("options-modal");
   options_modal->setAttributeValue("tabindex", "-1");
@@ -381,7 +483,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   options_modal_header->addWidget(new Wt::WText("<h3 class=\"modal-title\">Automata Constructor Options</h3>"));
   Wt::WContainerWidget *options_modal_body = new Wt::WContainerWidget(options_modal_content);
   options_modal_body->setStyleClass("modal-body");
-  // Check boxes
+
   Wt::WContainerWidget *options_modal_fg1 = new Wt::WContainerWidget(options_modal_body);
   options_modal_fg1->setStyleClass("form-group");
   Wt::WCheckBox *global_opt_check = new Wt::WCheckBox(" Global Optimization", options_modal_fg1);
@@ -404,59 +506,277 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WText *fan_out_error = new Wt::WText(options_modal_fg4);
   fan_out_error->setStyleClass("error-text");
   fan_out_input->setValidator(int_validator);
-    
-  // Buttons
+  Wt::WContainerWidget *options_modal_fg5 = new Wt::WContainerWidget(options_modal_body);
+  options_modal_fg5->setStyleClass("form-group");
+  Wt::WText *position_type_text = new Wt::WText("<b>Node Position Method: </b>", options_modal_fg5);
+  Wt::WComboBox *positioning_type_combo = new Wt::WComboBox(options_modal_fg5);
+  Wt::WFileUpload *graph_file_upload = new Wt::WFileUpload(options_modal_fg5);
+  Wt::WText *json_graph_error = new Wt::WText(options_modal_fg5);
+  json_graph_error->setStyleClass("error-text");
+  graph_file_upload->setId("graph_file_upload");
+  graph_file_upload->hide();
+  positioning_type_combo->setStyleClass("form-control");
+  positioning_type_combo->addItem("Default");
+  positioning_type_combo->addItem("Custom JSON");
+  positioning_type_combo->changed().connect(std::bind([=] () {
+	if (positioning_type_combo->currentIndex() == 1) { // If 'Custom JSON' is selected, show file upload area
+	  graph_file_upload->show();
+	}
+	else { // Some other positioning method, hide file upload area
+	  graph_file_upload->hide();
+	  json_graph_error->setText("");
+	}
+      }));
+
   Wt::WContainerWidget *options_modal_footer = new Wt::WContainerWidget(options_modal_content);
   options_modal_footer->setStyleClass("modal-footer");
   Wt::WPushButton *close_options_modal_button = new Wt::WPushButton("Close", options_modal_footer);
   close_options_modal_button->setStyleClass("btn btn-default");
   close_options_modal_button->setAttributeValue("data-dismiss", "modal");
   close_options_modal_button->clicked().connect(std::bind ( [=]() {
-	validAutomata = false;
+	json_string = "";
+	validJson = false;
+	positioning_type_combo->setCurrentIndex(0);
+	graph_file_upload->hide();
+	json_graph_error->setText("");
       }));
   Wt::WPushButton *generate_options_modal_button = new Wt::WPushButton("Generate", options_modal_footer);
   generate_options_modal_button->setStyleClass("btn btn-primary");
   generate_options_modal_button->clicked().connect(std::bind( [=]() {
-	if (fan_in_input->validate() != Wt::WValidator::Valid)
+	if (fan_in_input->validate() != Wt::WValidator::Valid) // Fan-in input is not greater than 0, display error
 	  fan_in_error->setText(" * Enter a valid number > 0");
 	else
 	  fan_in_error->setText("");
-	if (fan_out_input->validate() != Wt::WValidator::Valid)
+	if (fan_out_input->validate() != Wt::WValidator::Valid) // Fan-out input is not greater than 0, display error
 	  fan_out_error->setText(" * Enter a valid number > 0");
-	else
+	else // Both fan-in and fan-out are valid
 	  fan_out_error->setText("");
 
-	if (fan_in_input->validate() == Wt::WValidator::Valid && fan_out_input->validate() == Wt::WValidator::Valid) {
+	if (positioning_type_combo->currentIndex() == 1 && !validJson) // .json file was not uploaded as custom layout, display error
+	  json_graph_error->setText("Valid JSON data is required");
+
+	else if (fan_in_input->validate() == Wt::WValidator::Valid && fan_out_input->validate() == Wt::WValidator::Valid) { // All inputs valid, construct automata
 	  doJavaScript("$('#options-modal').modal('hide');");
 	  int fan_in = (fan_in_input->text().toUTF8().length() > 0) ? std::stoi(fan_in_input->text().toUTF8()) : 0;
 	  int fan_out = (fan_out_input->text().toUTF8().length() > 0) ? std::stoi(fan_out_input->text().toUTF8()) : 0;
-	  handleAutomataFile(global_opt_check->isChecked(), remove_or_check->isChecked(), fn, fan_in, fan_out);
+	  handleAutomataFile(validJson, global_opt_check->isChecked(), remove_or_check->isChecked(), fn, fan_in, fan_out);
+	  
+	  // Reset modal
 	  fan_in_error->setText("");
 	  fan_out_error->setText("");
 	  fan_in_input->setText("");
 	  fan_out_input->setText("");
 	  global_opt_check->setCheckState(Wt::CheckState::Unchecked);
 	  remove_or_check->setCheckState(Wt::CheckState::Unchecked);
+	  json_string = "";
+	  validJson = false;
+	  positioning_type_combo->setCurrentIndex(0);
+	  graph_file_upload->hide();
+	  json_graph_error->setText("");
 	}
-
       }));
-    
-   
+
+  /* Add STE Dialog */
+
+  Wt::WContainerWidget *ste_options_modal = new Wt::WContainerWidget(full_page_container);
+  ste_options_modal->setId("add-ste-modal");
+  ste_options_modal->setStyleClass("modal fade");
+  ste_options_modal->setAttributeValue("tabindex", "-1");
+  ste_options_modal->setAttributeValue("role", "dialog");
+  ste_options_modal->setAttributeValue("aria-hidden", "true");
+  ste_options_modal->setAttributeValue("data-backdrop", "static");
+  Wt::WContainerWidget *ste_options_modal_dialog = new Wt::WContainerWidget(ste_options_modal);
+  ste_options_modal_dialog->setStyleClass("modal-dialog");
+  ste_options_modal_dialog->setAttributeValue("role", "document");
+  Wt::WContainerWidget *ste_options_modal_content = new Wt::WContainerWidget(ste_options_modal_dialog);
+  ste_options_modal_content->setStyleClass("modal-content");
+  Wt::WContainerWidget *ste_options_modal_header = new Wt::WContainerWidget(ste_options_modal_content);
+  ste_options_modal_header->setStyleClass("modal-header");
+  ste_options_title = new Wt::WText("<h3 class='modal-title'>Create STE</h3>", ste_options_modal_header);
+  Wt::WContainerWidget *ste_options_modal_body = new Wt::WContainerWidget(ste_options_modal_content);
+  ste_options_modal_body->setStyleClass("modal-body");
+
+  Wt::WTable *ste_options_modal_table = new Wt::WTable(ste_options_modal_body);
+  ste_options_modal_table->setStyleClass("ste-options-table");
+  Wt::WContainerWidget *ste_options_fg1 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(0,0));
+  ste_options_fg1->addStyleClass("form-group");
+  Wt::WLabel *ste_id_label = new Wt::WLabel("ID: ", ste_options_fg1);
+  ste_id_label->setStyleClass("control-label");
+  ste_id_label->setAttributeValue("for", "ste-id-input");
+  ste_id_input = new Wt::WLineEdit(ste_options_fg1);
+  ste_id_input->setStyleClass("form-control");
+  ste_id_input->setId("ste-id-input");
+  Wt::WContainerWidget *ste_options_fg2 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(0,1));
+  ste_options_fg2->addStyleClass("form-group");
+  Wt::WLabel *ste_ss_label = new Wt::WLabel("Symbol Set: ", ste_options_fg2);
+  ste_ss_label->setStyleClass("control-label");
+  ste_ss_label->setAttributeValue("for", "ste-ss-input");
+  ste_ss_input = new Wt::WLineEdit(ste_options_fg2);
+  ste_ss_input->setStyleClass("form-control");
+  ste_ss_input->setId("ste-ss-input");
+  Wt::WContainerWidget *ste_options_fg3 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(1,0));
+  ste_options_fg3->addStyleClass("form-group");
+  Wt::WLabel *ste_start_label = new Wt::WLabel("Start Type:", ste_options_fg3);
+  ste_start_label->setStyleClass("control-label");
+  ste_start_label->setAttributeValue("for", "ste-start-select");
+  ste_start_select = new Wt::WComboBox(ste_options_fg3);
+  ste_start_select->setStyleClass("form-control");
+  ste_start_select->setId("ste-start-select");
+  ste_start_select->addItem("none");
+  ste_start_select->addItem("all-input");
+  ste_start_select->addItem("start-of-data");
+  Wt::WContainerWidget *ste_options_fg4 = new Wt::WContainerWidget(ste_options_modal_table->elementAt(1,1));
+  ste_options_fg4->addStyleClass("form-group");
+  reporting_check = new Wt::WCheckBox(" Reporting?", ste_options_fg4);
+  Wt::WBreak *ste_line_break = new Wt::WBreak(ste_options_fg4);
+  ste_rep_label = new Wt::WLabel("Report Code: ", ste_options_fg4);
+  ste_start_label->setStyleClass("control-label");
+  ste_start_label->setAttributeValue("for", "ste-rep-input");
+  ste_rep_input = new Wt::WLineEdit(ste_options_fg4);
+  ste_rep_input->setStyleClass("form-control");
+  ste_rep_input->setId("ste-rep-input");
+  ste_rep_label->hide();
+  ste_rep_input->hide();
+  reporting_check->clicked().connect(std::bind( [=] () {
+	if (reporting_check->isChecked()) { // If user checked "Reporting?", display input text box + label
+	  ste_rep_label->show();
+	  ste_rep_input->show();
+	}
+	else { // Otherwise, hide text box + label
+	  ste_rep_label->hide();
+	  ste_rep_input->hide();
+	}
+      }));
+  Wt::WText *ste_error_msg = new Wt::WText(ste_options_modal_body);
+  ste_error_msg->setInline(false);
+  ste_error_msg->setStyleClass("alert alert-danger");
+  ste_error_msg->hide();
+
+  Wt::WContainerWidget *ste_options_modal_footer = new Wt::WContainerWidget(ste_options_modal_content);
+  ste_options_modal_footer->setStyleClass("modal-footer");
+  Wt::WPushButton *ste_options_close_btn = new Wt::WPushButton("Cancel", ste_options_modal_footer);
+  ste_options_close_btn->setStyleClass("btn btn-default");
+  ste_options_close_btn->setAttributeValue("data-dismiss", "modal");
+  ste_options_close_btn->clicked().connect(std::bind( [=] () {
+	// Reset modal
+	ste_id_input->setText("");
+	ste_ss_input->setText("");
+	ste_rep_input->setText("");
+	ste_rep_input->hide();
+	ste_rep_label->hide();
+	ste_start_select->setCurrentIndex(0);
+	reporting_check->setCheckState(Wt::CheckState::Unchecked);	 
+	ste_error_msg->hide();
+      }));
+  Wt::WValidator *validator = new Wt::WValidator(true);
+  ste_id_input->setValidator(validator);
+  ste_ss_input->setValidator(validator);
+  ste_options_create_btn = new Wt::WPushButton("Create STE", ste_options_modal_footer);
+  ste_options_create_btn->setStyleClass("btn btn-primary"); 
+  ste_options_create_btn->setId("create-ste-btn");
+  ste_options_create_btn->clicked().connect(std::bind( [=] () {	
+	if (ste_id_input->validate() == Wt::WValidator::Valid 
+	    && ste_ss_input->validate() == Wt::WValidator::Valid) { // Input validation - ID and Symbol Set are mandatory
+	  auto elements = ap.getElements();
+	  // Does element with this ID already exist?
+	  if (ste_id_input->text().toUTF8() != ste_id && elements.find(ste_id_input->text().toUTF8()) != elements.end()) { // yes
+	    ste_error_msg->setText("ERROR: An STE with this ID already exists.");
+	    ste_error_msg->show();
+	  } 
+	  else { // Unique ID, good to go!
+	    std::string id = ste_id_input->text().narrow();
+	    std::string ss = ste_ss_input->text().narrow();
+	    std::string rep = (reporting_check->isChecked()) ? ("Report Code: " + ste_rep_input->text().toUTF8()) : "";
+	    std::string start = (ste_start_select->currentIndex() > 0) ? ("Start Type: " +  ste_start_select->currentText().toUTF8()) : "";
+	    std::string type = "node";
+
+	    if (start.length() > 0) // If start
+	      type = "start";
+	    else if (rep.length() > 0) // If reporting
+	      type = "report";
+
+	    if (editingSTE) { // If editing existing STE, update automata reference and graph visual
+	      STE * element = static_cast <STE *>(ap.getElements()[ste_id]);
+	      
+	      // Set all of the element's parameters
+	      ap.updateElementId(element, id);
+	      element->setReporting(rep.length() > 0);
+	      element->setReportCode(ste_rep_input->text().toUTF8());
+	      element->setSymbolSet(ss);
+	      element->setStart(ste_start_select->currentText().toUTF8());
+
+	      ap.validateElement(element);
+
+	      // Unescape all escaped characters in the symbol set for Javascript
+	      int start_pos = 0;
+	      while ((start_pos = ss.find(R"(\)", start_pos)) != std::string::npos) {
+		ss.replace(start_pos, 1, R"(\\)");
+		start_pos += 2;
+	      }	      
+
+	      // Send data to update Javascript
+	      doJavaScript("updateSTEData('" + id + "','" + ss + "','" + start + "','" + rep + "','" + type + "')");
+	    }
+	    else { // Add the new STE to the automata and the node to the graph
+	      STE *newSTE = new STE(id, ss, ste_start_select->currentText().toUTF8());
+
+	      if (type == "report") { // If element is reporting
+		newSTE->setReporting(true);
+		newSTE->setReportCode(ste_rep_input->text().toUTF8());
+	      }	  
+	      ap.rawAddSTE(newSTE);	     
+
+	      // Unescape all escaped characters in the symbol set for Javascript
+	      int start_pos = 0;
+	      while ((start_pos = ss.find(R"(\)", start_pos)) != std::string::npos) {
+		ss.replace(start_pos, 1, R"(\\)");
+		start_pos += 2;
+	      }	      
+
+	      // Send data to update Javascript
+	      doJavaScript("addSTE('" + id + "','" + ss + "','" + rep + "','" + start + "','" + type + "')");
+	    }
+
+	    // Reset modal
+	    ste_id_input->setText("");
+	    ste_ss_input->setText("");
+	    ste_rep_input->setText("");
+	    ste_rep_input->hide();
+	    ste_rep_label->hide();
+	    ste_start_select->setCurrentIndex(0);
+	    reporting_check->setCheckState(Wt::CheckState::Unchecked);	 
+	    ste_error_msg->hide();
+	    ste_options_title->setText("<h3 class='modal-title'>Create STE</h3>");
+	    ste_options_create_btn->setText("Create STE"); 
+	    editingSTE = false;
+	  }
+	}
+	else { // ID and/or Symbol Set fields are blank
+	  ste_error_msg->setText("ERROR: ID and Symbol Set are required fields.");
+	  ste_error_msg->show();
+	}
+      }));
+
 
   // ************** //
   // *** FOOTER *** //
   // ************** //
 
-  Wt::WContainerWidget *footer = new Wt::WContainerWidget(root());
+
+  Wt::WContainerWidget *footer = new Wt::WContainerWidget(full_page_container);
   footer->setStyleClass("footer");
-  // Text input display
+
+  /* Character stream table */
+
   Wt::WContainerWidget *input_display = new Wt::WContainerWidget(footer);
   input_display->setStyleClass("input-display");
   input_display->setId("input-display-container");
   input_display_table = new Wt::WTable(input_display);
   input_display_table->setId("input-table");
   input_display_table->setStyleClass("input-display-table");
-  // Nav bar
+
+  /* Navigation Bar Tabs */
+
   std::string navbar_string = 
     std::string("<ul class='nav nav-tabs'>") +
     "<li role='presentation' class='active' id='graph-tab'>" +
@@ -464,6 +784,9 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
     "</a></li>" +
     "<li role='presentation' id='sim-tab' style='display: none'>" +
     "<a role='button' onClick='sim_tab_clicked()'>Simulation Tools" +
+    "</a></li>" +
+    "<li role='presentation' id='editor-tab' style='display: none'>" +
+    "<a role='button' onClick='editor_tab_clicked()'>Editor Tools" +
     "</a></li>" +
     "</ul>";
   Wt::WText *navbar = new Wt::WText(footer);
@@ -477,41 +800,39 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WContainerWidget *graph_settings = new Wt::WContainerWidget(footer);
   graph_settings->setId("graph-settings");
   graph_settings->setStyleClass("settings-container");
-  // Input Table
   Wt::WTable *footer_table = new Wt::WTable(graph_settings);
   footer_table->setHeaderCount(1);
   footer_table->setStyleClass("footer-table");
-  // Table Headers
+
+  /* Table Headers */
+
   footer_table->elementAt(0,0)->addWidget(new Wt::WText("Node Size: "));
   footer_table->elementAt(0,1)->addWidget(new Wt::WText("Edge Thickness: "));
-  Wt::WCheckBox *disable_edges = new Wt::WCheckBox(" Render Edges?", footer_table->elementAt(0,2));
+  footer_table->elementAt(0,2)->addWidget(new Wt::WText("Width/Height Ratio: "));
+  footer_table->elementAt(0,3)->addWidget(new Wt::WText("Rotation: "));
+  Wt::WCheckBox *disable_edges = new Wt::WCheckBox(" Render Edges?", footer_table->elementAt(0,4));
   disable_edges->setId("render-edge-box");
   disable_edges->setChecked(true);
   disable_edges->setAttributeValue("onclick", "toggleEdges()");
-  Wt::WCheckBox *heat_mode_check = new Wt::WCheckBox(" Heat Map Mode", footer_table->elementAt(1,2));
-  heat_mode_check->setId("heat-mode-box");
-  heat_mode_check->setChecked(false);
-  heat_mode_check->setAttributeValue("onclick", "toggleHeatMap()");
-  footer_table->elementAt(0,3)->addWidget(new Wt::WText("Width/Height Ratio"));
-  Wt::WPushButton *reset_camera_btn = new Wt::WPushButton("Reset Camera", footer_table->elementAt(0,4));
+  Wt::WPushButton *reset_camera_btn = new Wt::WPushButton("Reset Camera <span class='glyphicon glyphicon-camera'></span>", footer_table->elementAt(0,5));
   reset_camera_btn->setStyleClass("btn btn-primary");
   reset_camera_btn->setId("reset-camera-btn");
+  reset_camera_btn->setTextFormat(Wt::XHTMLUnsafeText);
 
-  footer_table->elementAt(0,0)->setStyleClass("footer-text");
-  footer_table->elementAt(0,1)->setStyleClass("footer-text");
-  footer_table->elementAt(0,2)->setStyleClass("footer-text");
-  footer_table->elementAt(1,2)->setStyleClass("footer-text");
-  footer_table->elementAt(0,3)->setStyleClass("footer-text");
-  footer_table->elementAt(0,4)->setStyleClass("footer-text");
+  /* Table Footers/Inputs */
 
-  // Table footers/inputs
   Wt::WText *node_slider = new Wt::WText("<input type='range' min='0' max='57' step='1' value='25' id='node-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,0));
   Wt::WText *edge_slider = new Wt::WText("<input type='range' min='0' max='40' step='1' value='13' id='edge-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,1));
-  Wt::WText *width_slider = new Wt::WText("<input type='range' min='0' max='55' step='1' value='12' id='width-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,3));
+  Wt::WText *width_slider = new Wt::WText("<input type='range' min='0' max='55' step='1' value='12' id='width-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,2));
+  Wt::WText *angle_slider = new Wt::WText("<input type='range' min='-180' max='180' step='15' value='0' id='angle-slider'>", Wt::XHTMLUnsafeText, footer_table->elementAt(1,3));
+  Wt::WCheckBox *heat_mode_check = new Wt::WCheckBox(" Heat Map Mode", footer_table->elementAt(1,4));
+  heat_mode_check->setId("heat-mode-box");
+  heat_mode_check->setChecked(false);
+  Wt::WAnchor *graph_legend_btn = new Wt::WAnchor("graphLegend.html", "View Graph Legend", footer_table->elementAt(1,5));
+  graph_legend_btn->setStyleClass("btn btn-default");
+  graph_legend_btn->setId("graph-legend-btn");
+  graph_legend_btn->setAttributeValue("onClick", "javascript:window.open(\"graphLegend.html\", \"Graph Legend\", \"menubar=0,resizable=0,width=350,height=350\"); return false;");
 
-  footer_table->elementAt(1,0)->setStyleClass("footer-text");
-  footer_table->elementAt(1,1)->setStyleClass("footer-text");
-  footer_table->elementAt(1,3)->setStyleClass("footer-text");
 
   // ************************ //
   // *** SIMULATION TOOLS *** //
@@ -524,33 +845,63 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WTable *sim_tools_table = new Wt::WTable(simulation_tools);
   sim_tools_table->setHeaderCount(1);
   sim_tools_table->setStyleClass("footer-table");
+
+  /* Table Headers */
+
   sim_tools_table->elementAt(0,0)->addWidget(new Wt::WText("Cycle Index: "));
-  Wt::WText *cycle_index = new Wt::WText("0", sim_tools_table->elementAt(1,0));
-  cycle_index->setId("cycle-index-text");
-  cycle_index->setStyleClass("cycle-counter");
   sim_tools_table->elementAt(0,1)->addWidget(new Wt::WText("Simulation Controls: "));
   sim_tools_table->elementAt(0,1)->setColumnSpan(3);
   Wt::WText *play_speed_text = new Wt::WText("Play Speed: Fastest", sim_tools_table->elementAt(0,4));
   play_speed_text->setId("play-speed-text");
-
-  sim_tools_table->elementAt(0,1)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(0,4)->setStyleClass("footer-text");
   sim_tools_table->elementAt(0,4)->setWidth(200);
+  Wt::WText *stop_mode_text = new Wt::WText("Stop on ", sim_tools_table->elementAt(0,5));
+  Wt::WComboBox *stop_combo = new Wt::WComboBox(sim_tools_table->elementAt(0,5));
+  stop_combo->setId("stop-combo");
+  stop_combo->addItem("none");
+  stop_combo->addItem("report");
+  stop_combo->addItem("cycle");
+  Wt::WLineEdit *stop_rep_cycle = new Wt::WLineEdit(sim_tools_table->elementAt(0,5));
+  stop_rep_cycle->setId("stop-cycle-input");
+  stop_rep_cycle->setTextSize(1);
+  stop_rep_cycle->setAttributeValue("placeholder", "###");
+  Wt::WPushButton *reset_sim_btn = new Wt::WPushButton("Reset Simulation", sim_tools_table->elementAt(0,6));
+  reset_sim_btn->setStyleClass("btn btn-primary");
+  reset_sim_btn->setId("reset-sim-btn");
+  reset_sim_btn->clicked().connect(std::bind ( [=] () {
+	resetSimulation();
+      }));
 
+  /* Table Content/Inputs */
 
-  sim_rev = new Wt::WPushButton("<< Step", sim_tools_table->elementAt(1,1));
+  Wt::WText *cycle_index = new Wt::WText("0", sim_tools_table->elementAt(1,0));
+  cycle_index->setId("cycle-index-text");
+  cycle_index->setStyleClass("cycle-counter");
+  sim_rev = new Wt::WPushButton("<span class='glyphicon glyphicon-step-backward' aria-hidden='true'></span> Step", sim_tools_table->elementAt(1,1));
+  sim_rev->setTextFormat(Wt::XHTMLUnsafeText);
   sim_rev->setStyleClass("btn btn-primary");
-  sim_rev->setId("sim-rev-btn");
-  
-  sim_step = new Wt::WPushButton("Step >>", sim_tools_table->elementAt(1,2));
+  sim_rev->setId("sim-rev-btn");  
+  sim_step = new Wt::WPushButton("Step <span class='glyphicon glyphicon-step-forward' aria-hidden='true'></span>", sim_tools_table->elementAt(1,2));
+  sim_step->setTextFormat(Wt::XHTMLUnsafeText);
   sim_step->setStyleClass("btn btn-primary");
   sim_step->setId("sim-step-btn");
-  
-  Wt::WPushButton *play_btn = new Wt::WPushButton("Play Simulation", sim_tools_table->elementAt(1,3));
+  Wt::WPushButton *play_btn = new Wt::WPushButton("Play Simulation <span class='glyphicon glyphicon-play' aria-hidden='true'></span>", sim_tools_table->elementAt(1,3));
+  play_btn->setTextFormat(Wt::XHTMLUnsafeText);
   play_btn->setStyleClass("btn btn-primary");
   play_btn->setId("play-sim-btn");
-
   Wt::WText *speed_slider = new Wt::WText("<input type='range' min='-2' max='0' step='.1' value='0' id='speed-slider'>", Wt::XHTMLUnsafeText, sim_tools_table->elementAt(1,4));
+  Wt::WCheckBox *hex_mode_check = new Wt::WCheckBox(" Hex Char Mode", sim_tools_table->elementAt(1,5));
+  hex_mode_check->setId("hex-mode-box");
+  hex_mode_check->setChecked(false);
+  Wt::WAnchor *download_reports = new Wt::WAnchor(sim_tools_table->elementAt(1,6));
+  download_reports->setAttributeValue("role", "button");
+  download_reports->setAttributeValue("download", "reports.txt");		    
+  download_reports->setId("dl-rep-btn");
+  download_reports->setStyleClass("btn btn-default");
+  download_reports->setText("Download Report Record <span class='glyphicon glyphicon-save' aria-hidden='true'></span>");
+  download_reports->setTextFormat(Wt::XHTMLUnsafeText);
+  
+  /* Hidden Simulation Tools */
+  // For Javascript usage only
 
   Wt::WPushButton *hidden_play_btn = new Wt::WPushButton(simulation_tools);
   hidden_play_btn->setId("hidden-play-btn");
@@ -559,108 +910,134 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   hidden_cache_btn->setId("hidden-cache-btn");
   hidden_cache_btn->hide();
   hidden_cache_btn->clicked().connect( std::bind( [=] () {
-	  addToJSCache(cache_fetch_size);
+	addToJSCache(cache_fetch_size);
       }));
-
-  Wt::WCheckBox *hex_mode_check = new Wt::WCheckBox(" Hex Char Mode", sim_tools_table->elementAt(1,5));
-  hex_mode_check->setId("hex-mode-box");
-  hex_mode_check->setChecked(false);
-  Wt::WCheckBox *stop_sim_report_check = new Wt::WCheckBox(" Stop on Report", sim_tools_table->elementAt(0,5));
-  stop_sim_report_check->setId("stop-sim-report-box");
-  stop_sim_report_check->setChecked(false);
-
-  Wt::WAnchor *download_reports = new Wt::WAnchor(sim_tools_table->elementAt(1,6));
-  download_reports->setAttributeValue("role", "button");
-  download_reports->setAttributeValue("download", "reports.txt");		    
-  download_reports->setId("dl-rep-btn");
-  download_reports->setStyleClass("btn btn-default");
-  download_reports->setText("Download Report Record");
   
-  sim_tools_table->elementAt(1,0)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(1,1)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(1,2)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(1,3)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(1,4)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(1,5)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(0,5)->setStyleClass("footer-text");
-  sim_tools_table->elementAt(1,6)->setStyleClass("footer-text");
 
-  /*
-   * Graph container
-   */
-  Wt::WContainerWidget *container = new Wt::WContainerWidget(root());
+  // ******************** //
+  // *** EDITOR TOOLS *** //
+  // ******************** //
+  
+  Wt::WContainerWidget *editor_tools = new Wt::WContainerWidget(footer);
+  editor_tools->setId("editor-tools");
+  editor_tools->setStyleClass("settings-container");
+  editor_tools->hide();
+  Wt::WTable *editor_tools_table = new Wt::WTable(editor_tools);
+  editor_tools_table->setHeaderCount(1);
+  editor_tools_table->setStyleClass("footer-table");
+
+  /* Table Headers */
+  
+  editor_tools_table->elementAt(0,0)->addWidget(new Wt::WText("Selector Tools"));
+  editor_tools_table->elementAt(0,2)->addWidget(new Wt::WText("Select All"));
+  editor_tools_table->elementAt(0,3)->addWidget(new Wt::WText("Unselect All"));
+  editor_tools_table->elementAt(0,4)->addWidget(new Wt::WText("Select Neighbors"));
+  editor_tools_table->elementAt(0,5)->addWidget(new Wt::WText("Select Multiple"));
+  Wt::WPushButton *save_anml_btn = new Wt::WPushButton("Save ANML File <span class='glyphicon glyphicon-floppy-save' aria-hidden='true'></span>", editor_tools_table->elementAt(0,6));
+  save_anml_btn->setTextFormat(Wt::XHTMLUnsafeText);
+  save_anml_btn->setStyleClass("btn btn-primary");
+  save_anml_btn->setId("save-anml-btn");
+  save_anml_btn->clicked().connect(std::bind ( [=] () {
+	// Export code copied and modified from VASim
+	std::string str = "";
+
+	// xml header
+	str += "<anml version=\"1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n";
+	str += "<automata-network id=\"vasim\">\n";
+
+	for(auto el : ap.getElements()) {
+	  str += el.second->toANML();
+	  str += "\n";
+	}
+
+	// xml footer
+	str += "</automata-network>\n";
+	str += "</anml>\n";
+	
+	// Unescape all escaped newline characters
+	int start_pos = 0;
+	while ((start_pos = str.find("\n", start_pos)) != std::string::npos) {
+	  str.replace(start_pos, 1, "\\n");
+	  start_pos += 3;
+	}
+	
+	// Send string to Javascript to be downloaded to user
+	doJavaScript("exportFile('automata_file.anml', '" + str + "\')");
+      }));
+  
+  /* Table Inputs */
+  Wt::WPushButton *toggle_lasso = new Wt::WPushButton("Lasso Tool", editor_tools_table->elementAt(1,0));
+  toggle_lasso->setStyleClass("btn btn-primary");
+  toggle_lasso->setId("toggle-lasso-btn");
+  Wt::WPushButton *toggle_rect = new Wt::WPushButton("Box Selector", editor_tools_table->elementAt(1,1));
+  toggle_rect->setStyleClass("btn btn-primary");
+  toggle_rect->setId("toggle-rect-btn");
+  Wt::WText *spaceA = new Wt::WText("<kbd>spacebar</kbd> + <kbd>a</kbd>", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,2));
+  Wt::WText *spaceU = new Wt::WText("<kbd>spacebar</kbd> + <kbd>u</kbd>", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,3));
+  Wt::WText *spaceE = new Wt::WText("<kbd>spacebar</kbd> + <kbd>e</kbd>", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,4));
+  Wt::WText *spaceClick = new Wt::WText("<kbd>spacebar</kbd> + Left Click", Wt::XHTMLUnsafeText, editor_tools_table->elementAt(1,5));
+  Wt::WPushButton *save_graph_btn = new Wt::WPushButton("Save Graph Data <span class='glyphicon glyphicon-floppy-save' aria-hidden='true'></span>", editor_tools_table->elementAt(1,6));
+  save_graph_btn->setStyleClass("btn btn-default");
+  save_graph_btn->setId("save-graph-btn");
+  save_graph_btn->setTextFormat(Wt::XHTMLUnsafeText);
+  
+
+  /* Graph container */
+
+  Wt::WContainerWidget *container = new Wt::WContainerWidget(full_page_container);
   container->setId("container");
   Wt::WContainerWidget *graph_container = new Wt::WContainerWidget(container);
   graph_container->setId("graph-container");
-
-  // Include scripts
-  Wt::WApplication::instance()->requireJQuery("https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js");
-  Wt::WApplication::instance()->require("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js");
-  Wt::WApplication::instance()->require("js/page_script.js");
-  Wt::WApplication::instance()->require("js/sigma_script.js");
-  //Wt::WApplication::instance()->require("js/viva_script.js");
   
 
   // *************************** //
   // *** UPLOAD FILE PROCESS *** //
   // *************************** //
 
-  // Uploading automata file
+
+  /* Uploading automata file */
+
   automata_file_upload->changed().connect( std::bind([=] () {
-	modal_message->setText("Uploading file...");
+	load_modal_message->setText("Uploading file...");
 	std::cout << "STATUS: UPLOADING AUTOMATA FILE" << std::endl;
 	newFileUploaded();
 	loadInputTable();
 	doJavaScript("$('#loading-graph-modal').modal('show');");
 	automata_file_upload->upload();
       }));
-  // Converting file and displaying graph
+
+  /* Handle uploaded automata file */
+
   automata_file_upload->uploaded().connect(std::bind([=] () {
 	std::vector< Wt::Http::UploadedFile > file_vector = automata_file_upload->uploadedFiles();
 	std::string filename = automata_file_upload->clientFileName().toUTF8();
 	fn = file_vector.data()->spoolFileName();
-	automataUploaded = true;
+	automataUploaded = true;   
 
-	// Handle pre-formatted JSON files
-	if (filename.substr(filename.find_last_of(".")) == ".json") {
-	  std::ifstream ifs(fn);
-	  std::string content( (std::istreambuf_iterator<char>(ifs) ),
-			       (std::istreambuf_iterator<char>()    ) );
-	  std::string json_string = content;
-	  modal_message->setText("Loading graph...");
-	  processEvents();
-	  std::cout << "STATUS: LOADING GRAPH IN SIGMA" << std::endl;
-	  validAutomata = false;
-	  doJavaScript("loadGraph("+json_string+")");
-	}
-	// Handle MNRL and ANML
-	else if (filename.substr(filename.find_last_of(".")) == ".mnrl" ||
-		 filename.substr(filename.find_last_of(".")) == ".anml") {
-
-	  // Displays option modal
+	if (filename.substr(filename.find_last_of(".")) == ".mnrl" ||
+	    filename.substr(filename.find_last_of(".")) == ".anml") { // Verify file has .mnrl or .anml extension
+	  // Displays option modal to construct automata
 	  doJavaScript("$('#loading-graph-modal').modal('hide');");
 	  doJavaScript("$('#options-modal').modal('show');");
-	}
-	// Unsupported file type
-	else {
+	} else { // Unsupported file type
 	  doJavaScript("$('#loading-graph-modal').modal('hide');");
 	  error_modal_message->setText("Invalid automata file.");
 	  doJavaScript("$('#error-modal').modal('show');");
-	  validAutomata = false;
 	}
 	
       }));
 
-  // Uploading input file
+  /* Uploading input file */
+
   input_file_upload->changed().connect( std::bind([=] () {
-	modal_message->setText("Uploading file...");
+	load_modal_message->setText("Uploading file...");
 	std::cout << "STATUS: UPLOADING INPUT FILE" << std::endl;
 	doJavaScript("$('#loading-graph-modal').modal('show')");
-	newFileUploaded();
 	input_file_upload->upload();
       }));
 
-  // Handle uploaded file
+  /* Handle uploaded input file */
+
   input_file_upload->uploaded().connect(std::bind([=] () {
 	
 	doJavaScript("$('#loading-graph-modal').modal('hide');");
@@ -669,20 +1046,60 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	loadTextFromFile(""+file_vector.data()->spoolFileName());
 
       }));
-  // Load DOM elements on page
+
+  /* Uploading custom graph file */
+
+  graph_file_upload->changed().connect( std::bind([=] () {
+	std::cout << "STATUS: UPLOADING GRAPH FILE" << std::endl;
+	json_graph_error->setText("Uploading file...");
+	processEvents();
+	graph_file_upload->upload();
+      }));
+
+  /* Handle uploaded graph file */
+
+  graph_file_upload->uploaded().connect(std::bind([=] () {
+	json_graph_error->setText("");
+	processEvents();
+
+	std::vector< Wt::Http::UploadedFile > file_vector = graph_file_upload->uploadedFiles();
+	std::string filename = graph_file_upload->clientFileName().toUTF8();
+
+	if (filename.substr(filename.length() - 5) == ".json") { // Verify file is .json file
+	  // Read text content into 'json_string' global variable
+	  std::ifstream ifs(file_vector.data()->spoolFileName());
+	  std::string content( (std::istreambuf_iterator<char>(ifs) ),
+			       (std::istreambuf_iterator<char>()    ) );
+	  json_string = content;
+	  validJson = true;
+	  json_graph_error->setText("");
+	}  
+	else { // Handle a file that isn't JSON being uploaded
+	  validJson = false;
+	  json_graph_error->setText("File must have .json extension");
+	  processEvents();
+	}
+      }));
+
+  /* Load DOM elements on page before scripts run */
+
   processEvents();
+  // Sets references in Javascript to DOM elements, initializes important variables
   doJavaScript("pageLoad()");
 
-  // Load queries in following format:
+  // Load GET queries in following format:
   // ?a=AutomataName&o=dd&fi=n&fo=m where dd is bool value of global and or optimizations and n and m are numbers
   // ?a=Brill&o=10&fo=5 means load Brill with global opt and fan-out limit of 5
+
   auto paramMap = env.getParameterMap();
-  if (paramMap.find("a") != paramMap.end()) {
-    // Load graph with name given at a=,
-    // bring up optimization menu only if no opt code is provided
-    bool optQ = paramMap.find("o") != paramMap.end() || paramMap.find("fi") != paramMap.end() || paramMap.find("fo") != paramMap.end();
+  if (paramMap.find("a") != paramMap.end()) { // If automata name is provided -- minimum needed
+    // Load graph with name given at a=
+    // Bring up optimization menu only if no opt code is provided
+    bool optQ = paramMap.find("o") != paramMap.end() 
+      || paramMap.find("fi") != paramMap.end() 
+      || paramMap.find("fo") != paramMap.end();
     loadDemoGraph(paramMap["a"][0], !optQ);
-    if (optQ) {
+    if (optQ) { // If some opt code is provided
       std::string optCode;
       int fi = 0, fo = 0;
       if (paramMap.find("o") != paramMap.end())
@@ -691,13 +1108,69 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	fi = std::stoi(paramMap["fi"][0]);
       if (paramMap.find("fo") != paramMap.end())
 	fo = std::stoi(paramMap["fo"][0]);
-      handleAutomataFile(optCode[0] == '1', optCode[1] == '1', fn, fi, fo);
+      handleAutomataFile(false, optCode[0] == '1', optCode[1] == '1', fn, fi, fo);
     }
   }
 
 }
-/*
- * Resets simulation settings when new automata or input file is uploaded
+
+/**
+   Adds or removes a connection between two elements
+   @param sourceId the ID of the source element
+   @param targetId the ID of the target element
+   @param add true if the connection is being added; false if removing connection
+ */
+void VASimViz::toggleConnection(std::string sourceId, std::string targetId, bool add) {
+  auto elements = ap.getElements();
+  if (add)
+    ap.addEdge(elements[sourceId], elements[targetId]);
+  else
+    ap.removeEdge(elements[sourceId], elements[targetId]);
+}
+
+/**
+   Displays 'Update STE Data' modal (modified 'Create STE') with data from selected STE
+   @param id the ID of the selected STE
+   @param ss the Symbol Set of the selected STE as a string
+   @param start the start type of the selected STE
+   @param rep the report code of the selected STE
+ */
+void VASimViz::changeSTEData(std::string id, std::string ss, std::string start, std::string rep) {
+  ste_id_input->setText(id);
+  ste_ss_input->setText(ss);
+  ste_start_select->setCurrentIndex(ste_start_select->findText(start));
+  ste_rep_input->setText(rep);
+  ste_id = id;
+
+  ste_options_title->setText("<h3 class='modal-title'>Update STE Data</h3>");
+  if (rep.length() > 0) {
+    reporting_check->setChecked(true);
+    ste_rep_input->show();
+    ste_rep_label->show();
+  }
+  else {
+    reporting_check->setChecked(false);
+    ste_rep_input->hide();
+    ste_rep_label->hide();
+  }
+  ste_options_create_btn->setText("Update STE");
+
+  editingSTE = true;
+
+  doJavaScript("$('#add-ste-modal').modal('show')");
+}
+
+/**
+   Prompts the user to delete the selected STE by displaying modal with its ID
+   @param id the ID of the STE to be deleted
+ */
+void VASimViz::deleteSTE(std::string id) {
+  ste_id = id;
+  delete_modal_text->setText("Are you sure you want to delete <b>" + id + "</b>?");
+}
+
+/**
+   Resets simulation settings when new automata or input file is uploaded
  */
 void VASimViz::newFileUploaded() {
   cache_index = -1;
@@ -707,9 +1180,22 @@ void VASimViz::newFileUploaded() {
   doJavaScript("resetSimulation()");
   simulate->setEnabled(true);
 }
-/*
- * Loads a text file from a file name and places it into the character stream table
- * Adds both plain text and hex codes to different rows in table for easy toggling
+
+/**
+   Resets the automata and starts the simulation over from the beginning
+ */
+void VASimViz::resetSimulation() {
+  cache_index = -1;
+  cache = json11::Json::array{};
+  doJavaScript("resetSimulation()");
+  processEvents();
+  ap.reset();
+  beginSimulation();
+}
+
+/**
+   Loads a text file from a file name into 'input_string' and calls 'loadInputTable()'
+   @param fn the path to the text file being loaded in
  */
 void VASimViz::loadTextFromFile(std::string fn) {
   std::cout << "STATUS: READING FILE AND GENERATING TABLE" << std::endl;
@@ -720,13 +1206,19 @@ void VASimViz::loadTextFromFile(std::string fn) {
     input_string += line;
   }
   myfile.close();
-  std::cout << "Read file correctly " << std::endl;
   loadInputTable();
 }
 
+/**
+   Loads contents of 'input_string' into character stream in plain text and hex
+   For plain text, when character is not printable, displays hex value instead
+ */
 void VASimViz::loadInputTable() {
-    // Add up to 'max_input_display_size' table cells total, each containing a character
+  newFileUploaded();
+  std::cout << "STATUS: LOADING INPUT TABLE" << std::endl;
+  // Add up to 'max_input_display_size' table cells total, each containing a character
   int length = (input_string.length() > max_input_display_size) ? max_input_display_size : input_string.length();
+  if (length == 0) return; // Does not load empty table
   input_display_table->clear();
   for (int i = 0; i < length; i++) {
     std::string ch;
@@ -753,29 +1245,46 @@ void VASimViz::loadInputTable() {
   validInput = true;
 }
 
-/*
- * Initializes global automata object with user-defined settings
- * Loads automata as graph via Javascript to Sigma.js
+/**
+   Initializes global automata object with user-defined settings, then
+   loads automata as graph via Javascript to Sigma.js
+   @param jsonGraph true if custom JSON position data was uploaded; false otherwise
+   @param global true if global optimization is to be applied; false otherwise
+   @param OR true if OR gates are to be removed; false otherwise
+   @param fn the file name of the automata to be loaded
+   @param fanin_limit the maximum number of incoming connections an STE may have
+   @param fanout_limit the maximum number of outgoing connections an STE may have
  */
-void VASimViz::handleAutomataFile(bool global,  bool OR, std::string fn, int32_t fanin_limit, int32_t fanout_limit) 
+void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::string fn, int32_t fanin_limit, int32_t fanout_limit) 
 {
-  std::cout << "Fan-in limit: " << fanin_limit << ", Fan-out limit: " << fanout_limit << std::endl;
   // Create Automata object from file
   std::cout << "STATUS: CREATING AUTOMATA OBJECT FROM FILE" << std::endl;
-  modal_message->setText("Creating Automata object from file...");
+  load_modal_message->setText("Creating Automata object from file...");
   doJavaScript("$('#loading-graph-modal').modal('show')");
   processEvents();
 
   Automata a(fn);
   ap = a;
-  validAutomata = true;
-  uint32_t automata_size = ap.getElements().size();
   
-  modal_message->setText("Processing optimizations...");
+  if (a.getErrorCode() != E_SUCCESS) { // If automata encountered an error when constructing
+    doJavaScript("$('#loading-graph-modal').modal('hide')");
+    error_modal_message->setText("Invalid automata file.");
+    doJavaScript("$('#error-modal').modal('show');");
+    return;
+  }
+  // Proceed if successful
+
+  uint32_t automata_size = ap.getElements().size();
+
+  // Append optimizations to the URL
+  doJavaScript(std::string("appendOptimizations('") + ((global || OR) ? (std::string("&o=") + ((global) ? "1" : "0") + ((OR) ? "1" : "0")) : "") + 
+	       ((fanin_limit > 0) ? ("&fi=" + std::to_string(fanin_limit)) : "") + 
+	       ((fanout_limit > 0) ? ("&fo=" + std::to_string(fanout_limit)) : "") + "')");
+  
+  load_modal_message->setText("Processing optimizations...");
   processEvents();
 
-  // Left Minimization
-  if (global) {
+  if (global) { // Left Minimization
     ap.leftMinimize();        
     while(automata_size != ap.getElements().size()) {
       automata_size = ap.getElements().size();
@@ -783,71 +1292,76 @@ void VASimViz::handleAutomataFile(bool global,  bool OR, std::string fn, int32_t
     }
   }
 
-  // Remove OR gates, which are just syntactic sugar (benefitial for some hardware)
-  if(OR)
+  if (OR) { // Remove OR gates, which are just syntactic sugar (benefitial for some hardware)
     ap.removeOrGates();
+  }
 
-  // Enforce fan-in limit
-  if(fanin_limit > 0)
+  if (fanin_limit > 0) { // Enforce fan-in limit
     ap.enforceFanIn(fanin_limit);
+  }
 
-  // Enforce fan-out limit
-  if(fanout_limit > 0)
+  if (fanout_limit > 0) { // Enforce fan-out limit
     ap.enforceFanOut(fanout_limit);
+  }
 
-  ap.enableProfile();
-
-  // Convert to JSON
-  modal_message->setText("Converting to JSON format...");
-  processEvents();
-  std::cout << "STATUS: CONVERTING AUTOMATA TO JSON" << std::endl;
-  std::string json_string = SigmaJSONWriter::writeToJSON(&ap);
+  if (!jsonGraph){ // Position using default algorithm
+    load_modal_message->setText("Converting to JSON format...");
+    processEvents();
+    std::cout << "STATUS: CONVERTING AUTOMATA TO JSON" << std::endl;
+    json_string = SigmaJSONWriter::writeToJSON(&ap);
+  }
 
   // Load JSON in graph
-  modal_message->setText("Loading graph...");
+  load_modal_message->setText("Loading graph...");
   processEvents();
   std::cout << "STATUS: LOADING GRAPH IN SIGMA" << std::endl;
   doJavaScript("loadGraph("+json_string+")");
-  
 }
 
-/*
-
+/**
+  Creates 'random' tree automata; for use in layout algorithm debugging
  */
 void VASimViz::loadRandomAutomata() {
   ap = RandomAutomata::generateRandomAutomata();
-  ap.enableProfile();
   std::string json_string = SigmaJSONWriter::writeToJSON(&ap);
-  //  std::cout << json_string << std::endl;
   doJavaScript("loadGraph(" + json_string + ")");
 }
 
-/*
- * Simulates a single step of the automata on a character
- * Returns JSON data for Sigma to update graph coloring
+/**
+   Simulates a single step of the automata on a character
+   Returns JSON data for Sigma to update graph coloring
+   @param symbol the symbol to be simulated over
  */
 std::string VASimViz::simulateAutomata(char symbol) {
   return SigmaJSONWriter::simulateStep(&ap, symbol);
 }
 
-/*
- * Initializes simlation and loads first graph from cache
+/**
+   Initializes simlation and loads first graph from cache
  */
 void VASimViz::beginSimulation() {
+  // Enable profiling to allow simulation data to be collected
+  ap.enableProfile();
+  // Intialize the simulation
   ap.initializeSimulation();
+  // Move character selector back to beginning
   input_display_table->elementAt(0,0)->setStyleClass("highlight");
   input_display_table->elementAt(1,0)->setStyleClass("highlight");
+  
   doJavaScript("$('#loading-graph-modal').modal('show')");
-  modal_message->setText("Simulating automata into cache...");
+  load_modal_message->setText("Simulating automata into cache...");
   processEvents();
+  // Load cache with new graph data
   addToJSCache(cache_fetch_size + 1);
   doJavaScript("$('#loading-graph-modal').modal('hide')");
   processEvents();
+  // Display first graph in cache
   doJavaScript("stepFromCache(0)");
 }
 
-/*
- * Simulates and stores new graphs then sends to JavaScript
+/**
+   Simulates and stores new graphs then sends to JavaScript
+   @param numGraphs the number of new graphs to attempt to load
  */
 void VASimViz::addToJSCache(int numGraphs) {
   // 'graph_vector' contains all newly fetched graphs/data
@@ -855,9 +1369,10 @@ void VASimViz::addToJSCache(int numGraphs) {
   std::string err;
   int prevIndex = cache_index;
   // Set cache_index to the index of last simulated graph
+  // If cache_index + numGraphs is greater than the length of the input, load only up to the end of the input
   cache_index = (cache_index + numGraphs < input_string.length() - 1) ? cache_index + numGraphs : input_string.length() - 1;
   std::cout << "STATUS: Caching " << cache_index - prevIndex << " new graphs from index " << prevIndex + 1 << " to index " << cache_index << std::endl;
-  // Load last n elements of current cache where n = cache_fetch_size/2
+  // Load last n elements of current cache where n = cache_fetch_size / 2
   for (int i = cache[0].array_items().size() - cache_fetch_size + (cache_index - prevIndex) - cache_fetch_size/2; i < cache[0].array_items().size(); i++) {
     graph_vector.push_back(cache[0].array_items()[i]);
   }
@@ -867,20 +1382,24 @@ void VASimViz::addToJSCache(int numGraphs) {
     graph_vector.push_back(json11::Json::parse(simulateAutomata(input_string[i]), err));
   }
   cache = json11::Json::array {graph_vector};
-  //std::cout << cache.dump() << std::endl;
   doJavaScript("setCachedGraphs(" + std::to_string(cache_index) + ", " + cache.dump() + ")");
-  std::cout << "\tCache length is now " << graph_vector.size() << " graphs." << std::endl; 
-
 }
 
+/**
+   Loads graph from ANMLZoo library with its corresponding input
+   When multiple automata/inputs are provided, the first lexicographically is loaded
+   @param name the name of the ANMLZoo file/directory
+   @param userLoaded true if the user selected the file; false if loaded dynamically from URL
+ */
 void VASimViz::loadDemoGraph(std::string name, bool userLoaded) {
+  std::cout << "STATUS: LOADING GRAPH '" << name << "' FROM ANMLZOO" << std::endl;
   // Allows for simulation button to be clicked
   automataUploaded = true;
-  validAutomata = true;
   validInput = true;
 
   newFileUploaded(); 
 
+  // Load proper automata file and input file based on name
   if (name == "Brill") {
     loadTextFromFile("ANMLZoo/Brill/inputs/brill_1MB.input");
     fn = "ANMLZoo/Brill/anml/brill.1chip.anml";
@@ -956,19 +1475,29 @@ void VASimViz::loadDemoGraph(std::string name, bool userLoaded) {
     userLoaded = false;
     anmlzoo_combo->setCurrentIndex(15);
   }
+  else
+    return;
 
-  //url("?a=" + name);
-  if (userLoaded) {
+  doJavaScript("window.history.pushState({}, 'Title', '/?a=" + name + "')");
+  if (userLoaded) { // If user selected file or no optimizations provided, showing constuctor modal
     doJavaScript("$('#loading-graph-modal').modal('hide');");
     doJavaScript("$('#options-modal').modal('show');");
   }
 }
 
+/**
+   Creates the application -- provided by Wt
+   @param env the environment in which to load the appliation
+   @return the application that was created
+ */
 Wt::WApplication *createApplication(const Wt::WEnvironment& env)
 {
   return new VASimViz(env);
 }
 
+/**
+   Main method -- provided by Wt
+ */
 int main(int argc, char **argv)
 {
   return Wt::WRun(argc, argv, &createApplication);
