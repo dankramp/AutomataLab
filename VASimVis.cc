@@ -863,6 +863,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   Wt::WLineEdit *stop_rep_cycle = new Wt::WLineEdit(sim_tools_table->elementAt(0,5));
   stop_rep_cycle->setId("stop-cycle-input");
   stop_rep_cycle->setTextSize(1);
+  stop_rep_cycle->setAttributeValue("placeholder", "###");
   Wt::WPushButton *reset_sim_btn = new Wt::WPushButton("Reset Simulation", sim_tools_table->elementAt(0,6));
   reset_sim_btn->setStyleClass("btn btn-primary");
   reset_sim_btn->setId("reset-sim-btn");
