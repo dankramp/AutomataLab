@@ -642,6 +642,38 @@ function setInputLength(length) {
     input_length = length;
 }
 
+/**
+ * Opens the 'Create STE' modal
+ */
+function triggerAddSTE() {
+    tooltips.close();
+    $('#add-ste-modal').modal('show');
+}
+
+/**
+ * Sends data to C++ to load 'Update STE' modal with
+ * @param {String} nodeId - the ID of the node to be edited
+ */
+function triggerChangeData(nodeId) {
+    tooltips.close();
+    var node = sig.graph.nodes(nodeId),
+    start = (node.data.start) ? node.data.start.substring(12) : "none",
+    rep = (node.data.rep_code) ? node.data.rep_code.substring(13) : "";
+    editNodeId = nodeId;
+
+    Wt.emit(Wt, "changeSTEData", node.id, node.data.ss, start, rep);
+}
+
+/**
+ * Triggers deleting an STE from the automata
+ * @param {String} nodeId - the ID of the node to be deleted
+ */
+function triggerDeleteSTE(nodeId) {
+    tooltips.close();
+    $('#delete-ste-modal').modal('show');
+    Wt.emit(Wt, "deleteSTE", nodeId);
+}
+
 // **************************** //
 // *** SIMULATION FUNCTIONS *** //
 // **************************** //
@@ -777,38 +809,6 @@ function stepFromCache(step_size) {
 	    $('#hidden-cache-btn').click();	   
 	}
     });
-}
-
-/**
- * Opens the 'Create STE' modal
- */
-function triggerAddSTE() {
-    tooltips.close();
-    $('#add-ste-modal').modal('show');
-}
-
-/**
- * Sends data to C++ to load 'Update STE' modal with
- * @param {String} nodeId - the ID of the node to be edited
- */
-function triggerChangeData(nodeId) {
-    tooltips.close();
-    var node = sig.graph.nodes(nodeId),
-    start = (node.data.start) ? node.data.start.substring(12) : "none",
-    rep = (node.data.rep_code) ? node.data.rep_code.substring(13) : "";
-    editNodeId = nodeId;
-
-    Wt.emit(Wt, "changeSTEData", node.id, node.data.ss, start, rep);
-}
-
-/**
- * Triggers deleting an STE from the automata
- * @param {String} nodeId - the ID of the node to be deleted
- */
-function triggerDeleteSTE(nodeId) {
-    tooltips.close();
-    $('#delete-ste-modal').modal('show');
-    Wt.emit(Wt, "deleteSTE", nodeId);
 }
 
 /**
