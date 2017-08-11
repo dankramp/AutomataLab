@@ -47,3 +47,5 @@ Then in your browser, navigate to the link provided by Wt:
     - Jump to a specific step in the cache by clicking darkened characters in the character stream
     - Save a file containing information about all reported STEs by clicking "Download Report Record"
 8. Selecting a new automata or input file will reset the simulation and allow the user to restart without refreshing the page.
+
+See the [Wiki page](https://github.com/dankramp/ANMLViewer/wiki) for complete details on using and coding ANMLViewer.
