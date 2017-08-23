@@ -18,8 +18,32 @@ JSON11_HPP = $(JSON11)/json11.hpp
 # FLAGS
 CXXFLAGS= -O3 -Iinclude -I$(LIBS)/include -L$(LIBS)/lib $(WT) -I$(MNRL)/include -I$(VASIM)/include -I$(PUGI) -I$(JSON) -I$(JSON11) -std=c++11
 
-CC=g++-5
+CC=g++
 
 
-all:
-	$(CC) -o $(TARGET) VASimVis.cc $(LIBVASIM) $(LIBMNRL) $(CXXFLAGS)
+all: submodule_init auto_viewer
+
+auto_viewer: vasim
+	$(info )
+	$(info Compiling Automata Playground...)
+	$(MAKE) $(TARGET)
+
+vasim:
+	$(MAKE) -C $(VASIM)
+
+$(TARGET): VASimVis.cc $(LIBVASIM) $(LIBMNRL)
+	$(CC) -o $@ $^ $(CXXFLAGS)
+
+clean: cleanplay cleanvasim
+
+cleanplay:
+	$(info Cleaning Automata Playground...)
+	rm -f VASimVis
+
+cleanvasim:
+	cd VASim && $(MAKE) clean
+
+
+submodule_init:
+	$(info Updating submodules...)
+	@git submodule update --init --recursive

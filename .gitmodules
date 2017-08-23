@@ -4,3 +4,6 @@
 [submodule "FileSaver.js"]
 	path = FileSaver.js
 	url = https://github.com/eligrey/FileSaver.js.git
+[submodule "ANMLZoo"]
+	path = ANMLZoo
+	url = https://github.com/jackwadden/ANMLZoo.git

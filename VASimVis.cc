@@ -1,5 +1,3 @@
-//#include <Wt/Http/Client>
-//#include <Wt/Http/Request>
 #include <Wt/WApplication>
 #include <Wt/WAnchor>
 #include <Wt/WBreak>
@@ -25,7 +23,6 @@
 
 #include "automata.h"
 #include "SigmaJSONWriter.h"
-#include "RandomGraph.h"
 #include <json11.hpp>
 
 class VASimViz : public Wt::WApplication
@@ -36,7 +33,6 @@ public:
   void loadTextFromFile(std::string fn);
   void loadInputTable();
   void handleAutomataFile(bool jsonGraph, bool global, bool OR, std::string fn, int32_t fanin_limit=-1, int32_t fanout_limit=-1);
-  void loadRandomAutomata();
   std::string simulateAutomata(char symbol);
   void resetSimulation();
   void beginSimulation();
@@ -100,7 +96,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   deleteSTE_.connect(this, &VASimViz::deleteSTE);
 
   // Set page title
-  setTitle("ANML Viewer");
+  setTitle("Automata Lab");
 
   /* STYLE SHEETS */
 
@@ -213,7 +209,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   jumbotron->setStyleClass("jumbotron");
   Wt::WContainerWidget *container_head = new Wt::WContainerWidget(jumbotron);
   container_head->setStyleClass("container");
-  container_head->addWidget(new Wt::WText("<h1>ANML Viewer</h1>"));
+  container_head->addWidget(new Wt::WText("<h1>Automata Lab</h1>"));
   container_head->addWidget(new Wt::WText("<p>Visualize an automata machine and simulate for a given text file.</p>"));
   Wt::WTable *input_table = new Wt::WTable(container_head);
   input_table->setHeaderCount(1);
@@ -465,7 +461,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   load_modal_message->setText("Uploading file...");
   load_modal_body->addWidget(load_modal_message);
   
-  /* ANML Construction Options modal */
+  /* Automata Construction Options modal */
 
   Wt::WContainerWidget *options_modal = new Wt::WContainerWidget(full_page_container);
   options_modal->setStyleClass("modal fade");
@@ -1319,15 +1315,6 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
 }
 
 /**
-  Creates 'random' tree automata; for use in layout algorithm debugging
- */
-void VASimViz::loadRandomAutomata() {
-  ap = RandomAutomata::generateRandomAutomata();
-  std::string json_string = SigmaJSONWriter::writeToJSON(&ap);
-  doJavaScript("loadGraph(" + json_string + ")");
-}
-
-/**
    Simulates a single step of the automata on a character
    Returns JSON data for Sigma to update graph coloring
    @param symbol the symbol to be simulated over
@@ -1470,14 +1457,10 @@ void VASimViz::loadDemoGraph(std::string name, bool userLoaded) {
     fn = "Donut/donut.anml";
     anmlzoo_combo->setCurrentIndex(14);
   }
-  else if (name == "Random") {
-    loadRandomAutomata();
-    userLoaded = false;
-    anmlzoo_combo->setCurrentIndex(15);
-  }
   else
     return;
 
+  
   doJavaScript("window.history.pushState({}, 'Title', '/?a=" + name + "')");
   if (userLoaded) { // If user selected file or no optimizations provided, showing constuctor modal
     doJavaScript("$('#loading-graph-modal').modal('hide');");
