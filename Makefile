@@ -34,6 +34,8 @@ vasim:
 $(TARGET): VASimVis.cc $(LIBVASIM) $(LIBMNRL)
 	$(CC) -o $@ $^ $(CXXFLAGS)
 
+.PHONY: clean cleanplay cleanvasim submodule_init auto_viewer run
+
 clean: cleanplay cleanvasim
 
 cleanplay:
@@ -47,3 +49,6 @@ cleanvasim:
 submodule_init:
 	$(info Updating submodules...)
 	@git submodule update --init --recursive
+
+run: all
+	./run.sh
