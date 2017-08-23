@@ -209,7 +209,9 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   jumbotron->setStyleClass("jumbotron");
   Wt::WContainerWidget *container_head = new Wt::WContainerWidget(jumbotron);
   container_head->setStyleClass("container");
-  container_head->addWidget(new Wt::WText("<h1>Automata Lab</h1>"));
+  Wt::WAnchor *page_title = new Wt::WAnchor("https://github.com/dankramp/AutomataLab/", "<h1>Automata Lab</h1>");
+  page_title->setStyleClass("title");
+  container_head->addWidget(page_title);
   container_head->addWidget(new Wt::WText("<p>Visualize an automata machine and simulate for a given text file.</p>"));
   Wt::WTable *input_table = new Wt::WTable(container_head);
   input_table->setHeaderCount(1);
