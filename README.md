@@ -15,12 +15,11 @@ git clone https://github.com/dankramp/AutomataLab.git
 cd AutomataLab
 ```
 
-Once all the files are downloaded, run the following (downloads and installs required dependencies, compiles, and runs):
+Once all the files are downloaded, run the following (downloads and installs required dependencies):
 ```
 sudo apt-get install witty witty-dev g++-5 nasm libboost-all-dev
-make run
 ```
-Then in your browser, navigate to the link provided by Wt:
+To compile and run each time after, use `make run`. To skip compiling, simply use `./run.sh` instead. Then in your browser, navigate to the link provided by Wt:
 ```
     [info] "wthttp: started server: http://0.0.0.0:9090"
 ```
