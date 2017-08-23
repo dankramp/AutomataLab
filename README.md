@@ -18,8 +18,7 @@ cd AutomataLab
 Once all the files are downloaded, run the following (downloads and installs required dependencies, compiles, and runs):
 ```
 sudo apt-get install witty witty-dev g++-5 nasm libboost-all-dev
-make
-./run.sh
+make run
 ```
 Then in your browser, navigate to the link provided by Wt:
 ```
