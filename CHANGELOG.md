@@ -1,4 +1,4 @@
-# ANMLViewer Changelog
+# Automata Lab Changelog
 ### 1.2 - release (8/3/17)
 - __Stage Changes__
   - Added context menus:
