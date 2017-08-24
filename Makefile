@@ -28,18 +28,18 @@ CC=g++
 
 all: submodule_init auto_viewer
 
-auto_viewer: vasim
+auto_viewer:
 	$(info )
 	$(info Compiling Automata Playground...)
 	$(MAKE) $(TARGET)
 
-vasim:
-	$(MAKE) -C $(VASIM)
-
-$(TARGET): VASimVis.cc $(LIBVASIM) $(LIBMNRL)
+$(TARGET): VASimVis.cc vasim
 	$(CC) -o $@ $^ $(CXXFLAGS)
 
-.PHONY: clean cleanplay cleanvasim submodule_init auto_viewer run
+vasim:
+	$(MAKE) -C ./$(VASIM)
+
+.PHONY: clean cleanplay cleanvasim submodule_init auto_viewer vasim run
 
 clean: cleanplay cleanvasim
 
