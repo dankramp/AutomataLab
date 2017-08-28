@@ -31,7 +31,7 @@ See the [Wiki page](https://github.com/dankramp/AutomataLab/wiki) for complete d
 ## Citing Automata Lab
 If you use Automata Lab as a part of your work, please use the following citation:
 
-Kramp, D., Wadden, J., and Skadron, K. "Automata Lab: An Open-Source Automata Visualization, Simulation, and Manipulation Tool." University of Virginia, Tech Report #CS2017-03, 2016.
+Kramp, D., Wadden, J., and Skadron, K. "Automata Lab: An Open-Source Automata Visualization, Simulation, and Manipulation Tool." University of Virginia, Tech Report #CS2017-03, 2017.
 
 ```
 @techreport{vasim,
