@@ -20,7 +20,15 @@ IDIRS=-Iinclude -I$(MNRL)/include -I$(VASIM)/include -I$(PUGI) -I$(JSON) -I$(JSO
 # witty
 WTLIBS=-lwthttp -lwt
 # boost
-BOOSTLIBS= -lboost_random -lboost_regex -lboost_signals -lboost_system -lboost_thread -lboost_filesystem -lboost_program_options -lboost_date_time
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+        BOOST_THREAD=boost_thread
+endif
+ifeq ($(UNAME_S),Darwin)
+        BOOST_THREAD=boost_thread-mt
+endif
+
+BOOSTLIBS= -lboost_random -lboost_regex -lboost_signals -lboost_system -l$(BOOST_THREAD) -lboost_filesystem -lboost_program_options -lboost_date_time
 
 CXXFLAGS= -O3 -std=c++11 $(IDIRS) $(WTLIBS) $(BOOSTLIBS)
 
@@ -34,12 +42,12 @@ auto_viewer: vasim
 	$(MAKE) $(TARGET)
 
 vasim:
-	$(MAKE) -C $(VASIM)
+	$(MAKE) -C ./$(VASIM)
 
-$(TARGET): VASimVis.cc $(LIBVASIM) $(LIBMNRL)
-	$(CC) -o $@ $^ $(CXXFLAGS)
+$(TARGET): VASimVis.cc
+	$(CC) -o $@ $^ $(LIBVASIM) $(LIBMNRL) $(CXXFLAGS)
 
-.PHONY: clean cleanplay cleanvasim submodule_init auto_viewer run
+.PHONY: clean cleanplay cleanvasim submodule_init auto_viewer vasim run
 
 clean: cleanplay cleanvasim
 

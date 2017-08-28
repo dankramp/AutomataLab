@@ -48,6 +48,7 @@ public:
 
 private:
   std::string fn;
+  std::string client_fn;
   std::string input_string;
   std::string json_string;
   const int max_input_display_size = 1000;
@@ -71,7 +72,7 @@ private:
   std::string ste_id;
   Wt::WText *delete_modal_text;
 
-  Automata ap;
+  Automata *ap;
   json11::Json cache = json11::Json::array{};
 
   bool automataUploaded = false;
@@ -209,10 +210,10 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   jumbotron->setStyleClass("jumbotron");
   Wt::WContainerWidget *container_head = new Wt::WContainerWidget(jumbotron);
   container_head->setStyleClass("container");
-  Wt::WAnchor *page_title = new Wt::WAnchor("https://github.com/dankramp/AutomataLab/", "<h1>Automata Lab</h1>");
+  Wt::WAnchor *page_title = new Wt::WAnchor("https://github.com/dankramp/AutomataLab/", "<h2>Automata Lab</h2>");
   page_title->setStyleClass("title");
   container_head->addWidget(page_title);
-  container_head->addWidget(new Wt::WText("<p>Visualize an automata machine and simulate for a given text file.</p>"));
+  //container_head->addWidget(new Wt::WText("<p>Visualize an automata machine and simulate for a given text file.</p>"));
   Wt::WTable *input_table = new Wt::WTable(container_head);
   input_table->setHeaderCount(1);
   input_table->setStyleClass("header-table");
@@ -261,7 +262,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   simulate->setTextFormat(Wt::XHTMLUnsafeText);
   simulate->setStyleClass("btn btn-primary btn-lg");
   simulate->clicked().connect( std::bind([=] () {
-	if (ap.getElements().size() < 1) { // Automata is empty
+	if (ap->getElements().size() < 1) { // Automata is empty
 	  error_modal_message->setText("Automata has no elements. Please upload a file or create an automata before simulating.");
 	  doJavaScript("$('#error-modal').modal('show');");
 	} else if (!validInput) { // No input file to simulate on
@@ -436,7 +437,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   delete_modal_confirm_btn->setStyleClass("btn btn-danger");
   delete_modal_confirm_btn->setAttributeValue("data-dismiss", "modal");
   delete_modal_confirm_btn->clicked().connect(std::bind( [=]() {
-	ap.removeElement(ap.getElements()[ste_id]);
+        ap->removeElement(ap->getElement(ste_id));
 	doJavaScript("deleteSTE('" + ste_id + "')");
       }));
 
@@ -675,7 +676,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   ste_options_create_btn->clicked().connect(std::bind( [=] () {	
 	if (ste_id_input->validate() == Wt::WValidator::Valid 
 	    && ste_ss_input->validate() == Wt::WValidator::Valid) { // Input validation - ID and Symbol Set are mandatory
-	  auto elements = ap.getElements();
+	  auto elements = ap->getElements();
 	  // Does element with this ID already exist?
 	  if (ste_id_input->text().toUTF8() != ste_id && elements.find(ste_id_input->text().toUTF8()) != elements.end()) { // yes
 	    ste_error_msg->setText("ERROR: An STE with this ID already exists.");
@@ -694,16 +695,16 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	      type = "report";
 
 	    if (editingSTE) { // If editing existing STE, update automata reference and graph visual
-	      STE * element = static_cast <STE *>(ap.getElements()[ste_id]);
+              STE * element = static_cast <STE *>(ap->getElement(ste_id));
 	      
 	      // Set all of the element's parameters
-	      ap.updateElementId(element, id);
+	      ap->updateElementId(element, id);
 	      element->setReporting(rep.length() > 0);
 	      element->setReportCode(ste_rep_input->text().toUTF8());
 	      element->setSymbolSet(ss);
 	      element->setStart(ste_start_select->currentText().toUTF8());
 
-	      ap.validateElement(element);
+	      ap->validateElement(element);
 
 	      // Unescape all escaped characters in the symbol set for Javascript
 	      int start_pos = 0;
@@ -722,7 +723,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 		newSTE->setReporting(true);
 		newSTE->setReportCode(ste_rep_input->text().toUTF8());
 	      }	  
-	      ap.rawAddSTE(newSTE);	     
+	      ap->rawAddSTE(newSTE);	     
 
 	      // Unescape all escaped characters in the symbol set for Javascript
 	      int start_pos = 0;
@@ -943,7 +944,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	str += "<anml version=\"1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n";
 	str += "<automata-network id=\"vasim\">\n";
 
-	for(auto el : ap.getElements()) {
+	for(auto el : ap->getElements()) {
 	  str += el.second->toANML();
 	  str += "\n";
 	}
@@ -1009,6 +1010,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   automata_file_upload->uploaded().connect(std::bind([=] () {
 	std::vector< Wt::Http::UploadedFile > file_vector = automata_file_upload->uploadedFiles();
 	std::string filename = automata_file_upload->clientFileName().toUTF8();
+        client_fn = automata_file_upload->clientFileName().toUTF8();
 	fn = file_vector.data()->spoolFileName();
 	automataUploaded = true;   
 
@@ -1119,11 +1121,11 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
    @param add true if the connection is being added; false if removing connection
  */
 void VASimViz::toggleConnection(std::string sourceId, std::string targetId, bool add) {
-  auto elements = ap.getElements();
+  auto elements = ap->getElements();
   if (add)
-    ap.addEdge(elements[sourceId], elements[targetId]);
+    ap->addEdge(elements[sourceId], elements[targetId]);
   else
-    ap.removeEdge(elements[sourceId], elements[targetId]);
+    ap->removeEdge(elements[sourceId], elements[targetId]);
 }
 
 /**
@@ -1187,7 +1189,7 @@ void VASimViz::resetSimulation() {
   cache = json11::Json::array{};
   doJavaScript("resetSimulation()");
   processEvents();
-  ap.reset();
+  ap->reset();
   beginSimulation();
 }
 
@@ -1260,11 +1262,16 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
   load_modal_message->setText("Creating Automata object from file...");
   doJavaScript("$('#loading-graph-modal').modal('show')");
   processEvents();
-
-  Automata a(fn);
-  ap = a;
   
-  if (a.getErrorCode() != E_SUCCESS) { // If automata encountered an error when constructing
+  if(client_fn.empty()){
+      ap = new Automata(fn);
+  }else{
+      std::string extension = client_fn.substr(client_fn.find_last_of(".") + 1);
+      // extension should be "anml" or "mnrl"
+      ap = new Automata(fn, extension);
+  }
+  
+  if (ap->getErrorCode() != E_SUCCESS) { // If automata encountered an error when constructing
     doJavaScript("$('#loading-graph-modal').modal('hide')");
     error_modal_message->setText("Invalid automata file.");
     doJavaScript("$('#error-modal').modal('show');");
@@ -1272,7 +1279,7 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
   }
   // Proceed if successful
 
-  uint32_t automata_size = ap.getElements().size();
+  uint32_t automata_size = ap->getElements().size();
 
   // Append optimizations to the URL
   doJavaScript(std::string("appendOptimizations('") + ((global || OR) ? (std::string("&o=") + ((global) ? "1" : "0") + ((OR) ? "1" : "0")) : "") + 
@@ -1283,30 +1290,30 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
   processEvents();
 
   if (global) { // Left Minimization
-    ap.leftMinimize();        
-    while(automata_size != ap.getElements().size()) {
-      automata_size = ap.getElements().size();
-      ap.leftMinimize();
+    ap->leftMinimize();        
+    while(automata_size != ap->getElements().size()) {
+      automata_size = ap->getElements().size();
+      ap->leftMinimize();
     }
   }
 
   if (OR) { // Remove OR gates, which are just syntactic sugar (benefitial for some hardware)
-    ap.removeOrGates();
+    ap->removeOrGates();
   }
 
   if (fanin_limit > 0) { // Enforce fan-in limit
-    ap.enforceFanIn(fanin_limit);
+    ap->enforceFanIn(fanin_limit);
   }
 
   if (fanout_limit > 0) { // Enforce fan-out limit
-    ap.enforceFanOut(fanout_limit);
+    ap->enforceFanOut(fanout_limit);
   }
 
   if (!jsonGraph){ // Position using default algorithm
     load_modal_message->setText("Converting to JSON format...");
     processEvents();
     std::cout << "STATUS: CONVERTING AUTOMATA TO JSON" << std::endl;
-    json_string = SigmaJSONWriter::writeToJSON(&ap);
+    json_string = SigmaJSONWriter::writeToJSON(ap);
   }
 
   // Load JSON in graph
@@ -1322,7 +1329,7 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
    @param symbol the symbol to be simulated over
  */
 std::string VASimViz::simulateAutomata(char symbol) {
-  return SigmaJSONWriter::simulateStep(&ap, symbol);
+  return SigmaJSONWriter::simulateStep(ap, symbol);
 }
 
 /**
@@ -1330,9 +1337,9 @@ std::string VASimViz::simulateAutomata(char symbol) {
  */
 void VASimViz::beginSimulation() {
   // Enable profiling to allow simulation data to be collected
-  ap.enableProfile();
+  ap->enableProfile();
   // Intialize the simulation
-  ap.initializeSimulation();
+  ap->initializeSimulation();
   // Move character selector back to beginning
   input_display_table->elementAt(0,0)->setStyleClass("highlight");
   input_display_table->elementAt(1,0)->setStyleClass("highlight");
@@ -1388,6 +1395,8 @@ void VASimViz::loadDemoGraph(std::string name, bool userLoaded) {
 
   newFileUploaded(); 
 
+  client_fn = "";
+  
   // Load proper automata file and input file based on name
   if (name == "Brill") {
     loadTextFromFile("ANMLZoo/Brill/inputs/brill_1MB.input");
