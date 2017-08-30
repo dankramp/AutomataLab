@@ -27,3 +27,18 @@ To compile and run each time after, use `make run`. To skip compiling, simply us
 ## How To Use
 
 See the [Wiki page](https://github.com/dankramp/AutomataLab/wiki) for complete details on using and coding Automata Lab.
+
+## Citing Automata Lab
+If you use Automata Lab as a part of your work, please use the following citation:
+
+Kramp, D., Wadden, J., and Skadron, K. "Automata Lab: An Open-Source Automata Visualization, Simulation, and Manipulation Tool." University of Virginia, Tech Report #CS2017-03, 2017.
+
+```
+@techreport{vasim,
+    Author = {Kramp, Dan and Wadden, Jack and Skadron, Kevin},
+    Institution = {University of Virginia},
+    Number = {CS2017-03},
+    Title = {{Automata Lab: An Open-Source Automata Visualization, Simulation, and Manipulation Tool}},
+    Year = {2017}}
+```
+
