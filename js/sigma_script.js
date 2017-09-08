@@ -701,6 +701,10 @@ function resetSimulation() {
 	document.getElementsByClassName("footer")[0].offsetHeight + 
 	"px - " + document.getElementById("click-collapse-bar").offsetHeight + 
 	"px)";
+    sig.graph.nodes().forEach(function(n) {
+	n.count = 0;
+    });
+    toggleHeatMap();
 }
 
 /**
@@ -834,13 +838,12 @@ function updateGraph(updateJson) {
 	    delete e.color;
 	});
     }
-    /*
-      else {
-      changeGraph.nodes().forEach(function (n) {
-      var node = sig.graph.nodes(n.id);
-      node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
-      });
-      }*/
+    /*else {
+	changeGraph.nodes().forEach(function (n) {
+	    var node = sig.graph.nodes(n.id);
+	    node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
+	});
+    }*/
 
     // This will only store the IDs of all nodes and edges that were updated
     changedGraph = {nodes: [], edges: []};    
@@ -853,10 +856,10 @@ function updateGraph(updateJson) {
     // Update these nodes
     for (i = 0; i < nodesLength; i++) {
 	// Update count only if it is higher than before -- no backwards traversal for heat map
-	// sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
+	sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
 	if (heatMode) 
 	    sigmaNodes[i].color = "rgb(" + 
-	    +(255 - 255/(sigmaNodes[i].count+1)) + "," + 
+	    Math.floor(+(255 - 255/(sigmaNodes[i].count+1))) + "," + 
 	    Math.min(sigmaNodes[i].count, 255) + ",0)";
 	else
 	    sigmaNodes[i].color = getColor(updateJson.nodes[i].activity);
@@ -968,7 +971,7 @@ function toggleHeatMap() {
     if ($('#inheat-mode-box').is(':checked')) {
 	heatMode = true;
 	sig.graph.nodes().forEach(function (n) {
-	    n.color = "rgb(" + +(255 - 255/(n.count+1)) + "," + Math.min(n.count, 255) + ",0)";
+	    n.color = "rgb(" + Math.floor(+(255 - 255/(n.count+1))) + "," + Math.min(n.count, 255) + ",0)";
 	});
 	sig.graph.edges().forEach(function (e) {
 	    delete e.color;
