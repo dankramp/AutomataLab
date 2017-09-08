@@ -834,13 +834,12 @@ function updateGraph(updateJson) {
 	    delete e.color;
 	});
     }
-    /*
-      else {
-      changeGraph.nodes().forEach(function (n) {
-      var node = sig.graph.nodes(n.id);
-      node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
-      });
-      }*/
+    else {
+	changeGraph.nodes().forEach(function (n) {
+	    var node = sig.graph.nodes(n.id);
+	    node.color = "rgb(" + toInt(255 - 255/(node.count+1)) + "," + Math.min(node.count, 255) + ",0)";
+	});
+    }
 
     // This will only store the IDs of all nodes and edges that were updated
     changedGraph = {nodes: [], edges: []};    
