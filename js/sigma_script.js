@@ -701,6 +701,10 @@ function resetSimulation() {
 	document.getElementsByClassName("footer")[0].offsetHeight + 
 	"px - " + document.getElementById("click-collapse-bar").offsetHeight + 
 	"px)";
+    sig.graph.nodes().forEach(function(n) {
+	n.count = 0;
+    });
+    toggleHeatMap();
 }
 
 /**
@@ -967,7 +971,7 @@ function toggleHeatMap() {
     if ($('#inheat-mode-box').is(':checked')) {
 	heatMode = true;
 	sig.graph.nodes().forEach(function (n) {
-	    n.color = "rgb(" + +(255 - 255/(n.count+1)) + "," + Math.min(n.count, 255) + ",0)";
+	    n.color = "rgb(" + Math.floor(+(255 - 255/(n.count+1))) + "," + Math.min(n.count, 255) + ",0)";
 	});
 	sig.graph.edges().forEach(function (e) {
 	    delete e.color;
