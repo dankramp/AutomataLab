@@ -293,7 +293,7 @@ function loadGraph(json_object){
 	n.y = ~~n.y;
 	n.count = 0;
 	if (heatMode)
-	    n.color = "rgb(0,0,0)";
+	    n.color = heatmap.getHexColor(0);
     });
     
     // Set size of edges
@@ -634,8 +634,8 @@ function pageLoad() {
 
     sig.refresh({skipIndexation: false});
 
-    var colors = ['#ededed','#ff0000','#ffff00','#38ff00','#0024ff'];
-    var scale = [0,4,16,46,100];
+    var colors = ['#eeeeee','#ff0000','#ffff00','#38ff00','#0024ff'];
+    var scale = [0,4,16,46,150];
     heatmap = new HeatMapper(colors, scale);
 }
 
