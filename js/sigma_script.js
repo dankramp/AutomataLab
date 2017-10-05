@@ -141,6 +141,7 @@ var select;
 var keyboard;
 var lasso;
 var rectSelect;
+var heatmap;
 var editNodeId;
 var bounds;
 var automataChanged = false;
@@ -632,6 +633,10 @@ function pageLoad() {
     sig.bind('clickStage', function() {tooltips.close()});
 
     sig.refresh({skipIndexation: false});
+
+    var colors = ['#ededed','#ff0000','#ffff00','#38ff00','#0024ff'];
+    var scale = [0,4,16,46,100];
+    heatmap = new HeatMapper(colors, scale);
 }
 
 /**
@@ -858,9 +863,7 @@ function updateGraph(updateJson) {
 	// Update count only if it is higher than before -- no backwards traversal for heat map
 	sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
 	if (heatMode) 
-	    sigmaNodes[i].color = "rgb(" + 
-	    Math.floor(+(255 - 255/(sigmaNodes[i].count+1))) + "," + 
-	    Math.min(sigmaNodes[i].count, 255) + ",0)";
+	    sigmaNodes[i].color = heatmap.getHexColor(sigmaNodes[i].count);
 	else
 	    sigmaNodes[i].color = getColor(updateJson.nodes[i].activity);
 	// If node is activated, light up outgoing edges
@@ -971,7 +974,7 @@ function toggleHeatMap() {
     if ($('#inheat-mode-box').is(':checked')) {
 	heatMode = true;
 	sig.graph.nodes().forEach(function (n) {
-	    n.color = "rgb(" + Math.floor(+(255 - 255/(n.count+1))) + "," + Math.min(n.count, 255) + ",0)";
+	    n.color = heatmap.getHexColor(n.count);
 	});
 	sig.graph.edges().forEach(function (e) {
 	    delete e.color;

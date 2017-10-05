@@ -182,7 +182,9 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   // Mustache
   Wt::WApplication::instance()->require("https://cdnjs.cloudflare.com/ajax/libs/mustache.js/0.8.1/mustache.min.js");  
   // FileSaver
-  Wt::WApplication::instance()->require("FileSaver.js/FileSaver.js");  
+  Wt::WApplication::instance()->require("FileSaver.js/FileSaver.js");
+  // HeatMapper
+  Wt::WApplication::instance()->require("HeatMapper.js/HeatMapper.js");  
   // Custom page scripts
   Wt::WApplication::instance()->require("js/ViewerSettings.js");
   Wt::WApplication::instance()->require("js/page_script.js");
@@ -673,10 +675,12 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   ste_options_create_btn = new Wt::WPushButton("Create STE", ste_options_modal_footer);
   ste_options_create_btn->setStyleClass("btn btn-primary"); 
   ste_options_create_btn->setId("create-ste-btn");
-  ste_options_create_btn->clicked().connect(std::bind( [=] () {	
+  ste_options_create_btn->clicked().connect(std::bind( [=] () {
 	if (ste_id_input->validate() == Wt::WValidator::Valid 
 	    && ste_ss_input->validate() == Wt::WValidator::Valid) { // Input validation - ID and Symbol Set are mandatory
+	  std::cout << "Getting automata elements..." << std::endl;
 	  auto elements = ap->getElements();
+	  std::cout << "Got elements" << std::endl;
 	  // Does element with this ID already exist?
 	  if (ste_id_input->text().toUTF8() != ste_id && elements.find(ste_id_input->text().toUTF8()) != elements.end()) { // yes
 	    ste_error_msg->setText("ERROR: An STE with this ID already exists.");
@@ -722,8 +726,10 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	      if (type == "report") { // If element is reporting
 		newSTE->setReporting(true);
 		newSTE->setReportCode(ste_rep_input->text().toUTF8());
-	      }	  
-	      ap->rawAddSTE(newSTE);	     
+	      }
+	      std::cout << "Adding new STE..." << std::endl;
+	      ap->rawAddSTE(newSTE);
+	      std::cout << "Added!" << std::endl;
 
 	      // Unescape all escaped characters in the symbol set for Javascript
 	      int start_pos = 0;
