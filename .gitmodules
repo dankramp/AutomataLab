@@ -7,3 +7,6 @@
 [submodule "ANMLZoo"]
 	path = ANMLZoo
 	url = https://github.com/jackwadden/ANMLZoo.git
+[submodule "HeatMapper.js"]
+	path = HeatMapper.js
+	url = https://github.com/dankramp/HeatMapper.js.git
