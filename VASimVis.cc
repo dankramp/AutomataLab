@@ -1325,7 +1325,7 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
   // Load JSON in graph
   load_modal_message->setText("Loading graph...");
   processEvents();
-  std::cout << "STATUS: LOADING GRAPH IN SIGMA" << std::endl;
+  std::cout << "STATUS: LOADING GRAPH IN SIGMA...";
   doJavaScript("loadGraph("+json_string+")");
 }
 

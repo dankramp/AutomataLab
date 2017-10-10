@@ -165,11 +165,24 @@ class SigmaJSONWriter {
     std::string type = "";
     std::string data_string = "{";
     std::string err;
+    std::string symbolset = "";
+    std::string newSS = "";
     json11::Json data;
+    int start_pos = 0;
     switch (parent->getType()) {
     case ElementType::STE_T:
       // Add symbol set to data
-      data_string += "\"ss\": \"" + static_cast<STE *>(parent)->getSymbolSet() + "\", ";
+      symbolset = static_cast<STE *>(parent)->getSymbolSet();
+      newSS = "";
+      // Escape all quotes and slashes in symbol set for proper parsing and display
+      start_pos = 0;
+      while (symbolset[start_pos]) {
+	if (symbolset[start_pos] == '"' || symbolset[start_pos] == '\\')
+	  newSS += "\\";
+	newSS += symbolset[start_pos++];
+      }
+
+      data_string += "\"ss\": \"" + newSS + "\", ";
 
       if (parent->isReporting()) {
 	type = "report";
@@ -181,7 +194,7 @@ class SigmaJSONWriter {
       }
       else
 	type = "node";
-      
+     
       break;
     case ElementType::OR_T:
       type = "OR";
@@ -198,16 +211,12 @@ class SigmaJSONWriter {
     case ElementType::NOR_T:
       type = "NOR";
       break;
+    default:
+      type = "def";
     }
     // All elements will have the type parameter at a minimum
     data_string += "\"type\": \"" + type + "\"}";
- 
-    // Unescape all escaped characters so they are properly displayed
-    int start_pos = 0;
-    while ((start_pos = data_string.find(R"(\)", start_pos)) != std::string::npos) {
-      data_string.replace(start_pos, 1, R"(\\)");
-      start_pos += 2;
-    }
+
     data = json11::Json::parse(data_string, err);
 
     // Base case: no children
