@@ -427,6 +427,22 @@ function pageLoad() {
 		renderer: function(node, template) {
 		    return Mustache.render(template, node);
 		}
+	    },
+	    {
+		show: 'hovers',
+		cssClass: 'sigma-tooltip',
+		position: 'right',
+		hide: "hovers",
+		template:
+		'<ul class="custom-menu">' +
+		    '<div class="hover-info"><p>ID: {{id}}</p>' +
+		    '<p>Symbol Set: {{data.ss}}</p>' +
+		    '<p>{{data.start}}</p>' +
+		    '<p>{{data.rep_code}}</p></div>' +
+		    '</ul>',
+		renderer: function(node, template) {
+		    return Mustache.render(template, node);
+		}
 	    }
 	],
 	edge: {
