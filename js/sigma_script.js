@@ -293,7 +293,7 @@ function loadGraph(json_object){
 	n.y = ~~n.y;
 	n.count = 0;
 	if (heatMode)
-	    n.color = heatmap.getHexColor(0);
+	    n.color = heatmap.getHexColor(0, true);
     });
     
     // Set size of edges
@@ -634,8 +634,8 @@ function pageLoad() {
 
     sig.refresh({skipIndexation: false});
 
-    var colors = ['#eeeeee','#ff0000','#ffff00','#38ff00','#0024ff'];
-    var scale = [0,4,16,46,150];
+    var colors = ['#eeeeee','#ff0000','#ff8800','#ffff00','#00ff00','#00ffff','#0000ff','#000088'];
+    var scale = [0,5,13,23,38,56,77,99];
     heatmap = new HeatMapper(colors, scale);
 }
 
@@ -863,7 +863,7 @@ function updateGraph(updateJson) {
 	// Update count only if it is higher than before -- no backwards traversal for heat map
 	sigmaNodes[i].count = Math.max(parseInt(updateJson.nodes[i].count), sigmaNodes[i].count);
 	if (heatMode) 
-	    sigmaNodes[i].color = heatmap.getHexColor(sigmaNodes[i].count);
+	    sigmaNodes[i].color = heatmap.getHexColor(sigmaNodes[i].count, true);
 	else
 	    sigmaNodes[i].color = getColor(updateJson.nodes[i].activity);
 	// If node is activated, light up outgoing edges
@@ -974,7 +974,7 @@ function toggleHeatMap() {
     if ($('#inheat-mode-box').is(':checked')) {
 	heatMode = true;
 	sig.graph.nodes().forEach(function (n) {
-	    n.color = heatmap.getHexColor(n.count);
+	    n.color = heatmap.getHexColor(n.count, true);
 	});
 	sig.graph.edges().forEach(function (e) {
 	    delete e.color;
