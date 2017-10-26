@@ -332,9 +332,7 @@
 	function remove() {
 	    if (_tooltip && _tooltip.parentNode) {
 		// Remove from the DOM:
-		console.log(closeMethod);
 		closeMethod = undefined;
-		console.log("Removed from DOM");
 		_tooltip.parentNode.removeChild(_tooltip);
 		_tooltip = null;
 	    }
