@@ -72,7 +72,7 @@ private:
   std::string ste_id;
   Wt::WText *delete_modal_text;
 
-  Automata *ap;
+  Automata *ap = new Automata;
   json11::Json cache = json11::Json::array{};
 
   bool automataUploaded = false;
