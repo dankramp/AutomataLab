@@ -326,7 +326,7 @@ function pageLoad() {
     // Loading the default settings for a sigma instance
     sig_settings = {
 	autoRescale: ['nodePosition'],
-	skipIndexation: true,
+	skipIndexation: false,
 	hideEdgesOnMove: true,
 	zoomMin: .00001,
 	zoomMax: 2,
@@ -1033,7 +1033,7 @@ function widthChange(val) {
 	n.x *= ratio;
     });
     graphWidth = val;
-    sig.refresh({skipIndexation: true});
+    sig.refresh({skipIndexation: false});
 }
 
 
