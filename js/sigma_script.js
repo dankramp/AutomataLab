@@ -1262,6 +1262,9 @@ function toggleEditorMode() {
 	var renderer = sig.renderers[0];
 	activeState = sigma.plugins.activeState(sig);
 	dragListener = sigma.plugins.dragNodes(sig, renderer, activeState);
+	dragListener.bind('startdrag', function() {
+	    tooltips.close();
+	});
 	select = sigma.plugins.select(sig, activeState, renderer);
 	keyboard = sigma.plugins.keyboard(sig, renderer);
 	select.bindKeyboard(keyboard);
