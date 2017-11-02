@@ -238,6 +238,8 @@
 
 	    _tooltip.addEventListener('mouseleave', function() {
 		_mouseOverTooltip = false;
+		if (closeMethod != 'clickStage')
+		    self.close();
 	    }, false);
 
 	    // Execute after rendering:
@@ -460,7 +462,7 @@
 
 	    s.bind(tooltip.hide, function(event) {
 		if (event.data.leave && event.data.leave.nodes.length == 0 || closeMethod == "clickStage")
-		    return
+		    return;
 		var p = _tooltip;
 		delayedCancel(settings.node.hideDelay);
 		if (p)
