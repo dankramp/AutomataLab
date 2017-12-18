@@ -37,6 +37,7 @@
             break;
         }
 
+
       // Normalize color:
       color = sigma.utils.floatColor(color);
 
