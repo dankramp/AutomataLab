@@ -47,6 +47,7 @@ public:
   Wt::JSignal<std::string> deleteSTE_;
 
 private:
+
   std::string fn;
   std::string client_fn;
   std::string input_string;
@@ -131,6 +132,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   // WebGL 
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js");
+  Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.nodes.square.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js");
   Wt::WApplication::instance()->require("/sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js");
 

@@ -245,17 +245,17 @@ function getColor(data) {
 function indexClick(index) {
     // Disable/enable sim buttons
     if (index == cache_index) { // end of cache; disable moving forward 
-	$sim_step_btn.prop("disabled", true);
-	$play_sim_btn.prop("disabled", true);
+    	$sim_step_btn.prop("disabled", true);
+    	$play_sim_btn.prop("disabled", true);
     }
     else { // otherwise enable
-	$sim_step_btn.prop("disabled", false);
-	$play_sim_btn.prop("disabled", false);
+    	$sim_step_btn.prop("disabled", false);
+    	$play_sim_btn.prop("disabled", false);
     }
     if (index == cache_index - cache_length + 1) // beginning of cache; disable moving back
-	$sim_rev_btn.prop("disabled", true);
+    $sim_rev_btn.prop("disabled", true);
     else // otherwise enable
-	$sim_rev_btn.prop("disabled", false);
+    	$sim_rev_btn.prop("disabled", false);
 
     stepFromCache(index - simIndex);
 }
@@ -286,19 +286,21 @@ function loadGraph(json_object){
 
     // Set sizes and save color of nodes
     sig.graph.nodes().forEach(function(n) {
-	n.size = elemScalar * nodeSize;
-	n.color = getColor(n.data.type);
-	n.originalColor = n.color;
-	n.x = n.x * Math.pow(1.1, graphWidth);
-	n.y = ~~n.y;
-	n.count = 0;
-	if (heatMode)
-	    n.color = heatmap.getHexColor(0, true);
+    	n.size = elemScalar * nodeSize;
+    	n.color = getColor(n.data.type);
+    	n.originalColor = n.color;
+    	n.x = n.x * Math.pow(1.1, graphWidth);
+    	n.y = ~~n.y;
+    	n.count = 0;
+    	if (heatMode)
+    		n.color = heatmap.getHexColor(0, true);
+    	if (n.data.type != 'node')
+    		n.type = 'square';
     });
     
     // Set size of edges
     sig.graph.edges().forEach(function(e) {
-	e.size = elemScalar * edgeSize;
+    	e.size = elemScalar * edgeSize;
     });
 
     sig.refresh();
