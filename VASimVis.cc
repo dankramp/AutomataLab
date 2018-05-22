@@ -23,6 +23,7 @@
 
 #include "automata.h"
 #include "SigmaJSONWriter.h"
+#include "ForceDirectedLayout.h"
 #include <json11.hpp>
 
 class VASimViz : public Wt::WApplication
@@ -35,8 +36,8 @@ public:
   void handleAutomataFile(bool jsonGraph, bool global, bool OR, std::string fn, int32_t fanin_limit=-1, int32_t fanout_limit=-1);
   std::string simulateAutomata(char symbol);
   void resetSimulation();
-  void beginSimulation();
-  void addToJSCache(int numGraphs);
+  void beginSimulation();  
+  void addToJSCache(int numGraphs); //  
   void loadDemoGraph(std::string name, bool user);
   void toggleConnection(std::string sourceId, std::string targetId, bool addEdge);
   void changeSTEData(std::string id, std::string ss, std::string start, std::string rep);
@@ -1321,7 +1322,7 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
     load_modal_message->setText("Converting to JSON format...");
     processEvents();
     std::cout << "STATUS: CONVERTING AUTOMATA TO JSON" << std::endl;
-    json_string = SigmaJSONWriter::writeToJSON(ap);
+    json_string = ForceDirectedLayout::writeToJSON(ap);
   }
 
   // Load JSON in graph
