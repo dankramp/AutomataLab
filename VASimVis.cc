@@ -20,6 +20,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <exception>
 
 #include "automata.h"
 #include "SigmaJSONWriter.h"
@@ -39,6 +40,8 @@ public:
   void beginSimulation();  
   void addToJSCache(int numGraphs); //  
   void loadDemoGraph(std::string name, bool user);
+  void uploadAutomataFile();
+  void uploadInputFile();
   void toggleConnection(std::string sourceId, std::string targetId, bool addEdge);
   void changeSTEData(std::string id, std::string ss, std::string start, std::string rep);
   void deleteSTE(std::string id);
@@ -73,6 +76,9 @@ private:
   Wt::WPushButton *ste_options_create_btn;
   std::string ste_id;
   Wt::WText *delete_modal_text;
+
+  Wt::WFileUpload *automata_file_upload;
+  Wt::WFileUpload *input_file_upload;
 
   Automata *ap = new Automata;
   json11::Json cache = json11::Json::array{};
@@ -231,30 +237,36 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   
   /* Input row */
  
-  Wt::WFileUpload *automata_file_upload = new Wt::WFileUpload(input_table->elementAt(1,0));
+  automata_file_upload = new Wt::WFileUpload(input_table->elementAt(1,0));
   automata_file_upload->setFileTextSize(30);
   automata_file_upload->setId("automata_file");
+  Wt::WPushButton *a_refresh_btn = new Wt::WPushButton("Refresh File &nbsp;<span class='glyphicon glyphicon-refresh'></span>", Wt::XHTMLUnsafeText, input_table->elementAt(2,0));
+  a_refresh_btn->setStyleClass("btn btn-secondary btn-sm");
+  a_refresh_btn->clicked().connect( std::bind([=] () {
+	if (automata_file_upload->clientFileName().toUTF8() != "") {
+	  uploadAutomataFile();
+	}
+      }));
 
-  Wt::WFileUpload *input_file_upload = new Wt::WFileUpload(input_table->elementAt(1,1));
+  input_file_upload = new Wt::WFileUpload(input_table->elementAt(1,1));
   input_file_upload->setId("input_file");
+  Wt::WPushButton *i_refresh_btn = new Wt::WPushButton("Refresh File &nbsp;<span class='glyphicon glyphicon-refresh'></span>", Wt::XHTMLUnsafeText, input_table->elementAt(2,1));
+  i_refresh_btn->setStyleClass("btn btn-secondary btn-sm");
+  i_refresh_btn->clicked().connect( std::bind([=] () {
+	if (input_file_upload->clientFileName().toUTF8() != "") {
+	  uploadInputFile();
+	}
+      }));
 
   anmlzoo_combo = new Wt::WComboBox(input_table->elementAt(1,2));
   anmlzoo_combo->setId("anmlzoo-combo");
   anmlzoo_combo->addItem("- Select ANMLZoo File -");
-  anmlzoo_combo->addItem("Brill");
-  anmlzoo_combo->addItem("ClamAV");
-  anmlzoo_combo->addItem("Dotstar");
-  anmlzoo_combo->addItem("EntityResolution");
-  anmlzoo_combo->addItem("Fermi");
-  anmlzoo_combo->addItem("Hamming");
-  anmlzoo_combo->addItem("Levenshtein");
-  anmlzoo_combo->addItem("PowerEN");
-  anmlzoo_combo->addItem("Protomata");
-  anmlzoo_combo->addItem("RandomForest");
-  anmlzoo_combo->addItem("Snort");
-  anmlzoo_combo->addItem("SPM");
-  anmlzoo_combo->addItem("Synthetic");
-  anmlzoo_combo->addItem("Donut");
+  std::string anmlzoo_choices[] = {"Brill", "ClamAV", "Dotstar", "EntityResolution", "Fermi",
+				 "Hamming", "Levenshtein", "PowerEN", "Protomata", "RandomForest",
+				 "Snort", "SPM", "Synthetic", "Donut"};
+  for (std::string s:anmlzoo_choices) {
+    anmlzoo_combo->addItem(s);
+  }
   //anmlzoo_combo->addItem("Random");
   anmlzoo_combo->setCurrentIndex(0);
   anmlzoo_combo->setMargin(10, Wt::Right);
@@ -1006,12 +1018,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   /* Uploading automata file */
 
   automata_file_upload->changed().connect( std::bind([=] () {
-	load_modal_message->setText("Uploading file...");
-	std::cout << "STATUS: UPLOADING AUTOMATA FILE" << std::endl;
-	newFileUploaded();
-	loadInputTable();
-	doJavaScript("$('#loading-graph-modal').modal('show');");
-	automata_file_upload->upload();
+	uploadAutomataFile();
       }));
 
   /* Handle uploaded automata file */
@@ -1020,6 +1027,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
 	std::vector< Wt::Http::UploadedFile > file_vector = automata_file_upload->uploadedFiles();
 	std::string filename = automata_file_upload->clientFileName().toUTF8();
         client_fn = automata_file_upload->clientFileName().toUTF8();
+	std::cout << "Client filename: '" << client_fn << "'" << std::endl;
 	fn = file_vector.data()->spoolFileName();
 	automataUploaded = true;   
 
@@ -1039,10 +1047,7 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
   /* Uploading input file */
 
   input_file_upload->changed().connect( std::bind([=] () {
-	load_modal_message->setText("Uploading file...");
-	std::cout << "STATUS: UPLOADING INPUT FILE" << std::endl;
-	doJavaScript("$('#loading-graph-modal').modal('show')");
-	input_file_upload->upload();
+	uploadInputFile();
       }));
 
   /* Handle uploaded input file */
@@ -1121,6 +1126,22 @@ VASimViz::VASimViz(const Wt::WEnvironment& env)
     }
   }
 
+}
+
+void VASimViz::uploadAutomataFile() {
+  load_modal_message->setText("Uploading file...");
+  std::cout << "STATUS: UPLOADING AUTOMATA FILE" << std::endl;
+  newFileUploaded();
+  loadInputTable();
+  doJavaScript("$('#loading-graph-modal').modal('show');");
+  automata_file_upload->upload();
+}
+
+void VASimViz::uploadInputFile() {
+  load_modal_message->setText("Uploading file...");
+  std::cout << "STATUS: UPLOADING INPUT FILE" << std::endl;
+  doJavaScript("$('#loading-graph-modal').modal('show')");
+  input_file_upload->upload();
 }
 
 /**
@@ -1322,7 +1343,7 @@ void VASimViz::handleAutomataFile(bool jsonGraph, bool global,  bool OR, std::st
     load_modal_message->setText("Converting to JSON format...");
     processEvents();
     std::cout << "STATUS: CONVERTING AUTOMATA TO JSON" << std::endl;
-    json_string = ForceDirectedLayout::writeToJSON(ap);
+    json_string = SigmaJSONWriter::writeToJSON(ap);
   }
 
   // Load JSON in graph
